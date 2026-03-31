@@ -1,0 +1,15 @@
+{
+    "python.analysis.extraPaths": ["${workspaceFolder}"],
+    "python.defaultInterpreterPath": "python3",
+    "python.testing.pytestEnabled": false,
+    "python.testing.unittestEnabled": false,
+    "editor.formatOnSave": true,
+    "editor.rulers": [100],
+    "files.exclude": {
+        "**/__pycache__": true,
+        "**/*.pyc": true
+    },
+    "[python]": {
+        "editor.tabSize": 4
+    }
+}
