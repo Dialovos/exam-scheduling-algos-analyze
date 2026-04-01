@@ -160,6 +160,22 @@ class FastEvaluator:
         # Period hard constraints
         self.phcs = [(c.exam1_id, c.constraint_type, c.exam2_id)
                      for c in problem.period_hard_constraints]
+        # Period hard constraints indexed by exam for O(k) delta lookup
+        # phc_by_exam[eid] = [(other_eid, type_code)]
+        #   type_code: 0=COINCIDENCE, 1=EXCLUSION, 2=AFTER(eid must come after other)
+        self.phc_by_exam: list[list[tuple[int, int]]] = [[] for _ in range(n_e)]
+        for c in problem.period_hard_constraints:
+            e1, e2 = c.exam1_id, c.exam2_id
+            if e1 >= n_e or e2 >= n_e:
+                continue
+            if c.constraint_type == "EXAM_COINCIDENCE":
+                self.phc_by_exam[e1].append((e2, 0))
+                self.phc_by_exam[e2].append((e1, 0))
+            elif c.constraint_type == "EXCLUSION":
+                self.phc_by_exam[e1].append((e2, 1))
+                self.phc_by_exam[e2].append((e1, 1))
+            elif c.constraint_type == "AFTER":
+                self.phc_by_exam[e1].append((e2, 2))  # e1 must come after e2
         # Room hard constraints
         self.rhc_exams = set(c.exam_id for c in problem.room_hard_constraints
                              if c.constraint_type == "ROOM_EXCLUSIVE")
@@ -412,6 +428,27 @@ class FastEvaluator:
                 delta_soft -= self.fl_penalty
             elif not was_late and will_late:
                 delta_soft += self.fl_penalty
+
+        # --- Hard: period hard constraints (COINCIDENCE/EXCLUSION/AFTER) ---
+        for other, tcode in self.phc_by_exam[exam_id]:
+            o_pid = period_of[other]
+            if o_pid < 0:
+                continue
+            if tcode == 0:        # COINCIDENCE: must share period
+                if old_pid != o_pid:
+                    delta_hard -= 1  # was violated
+                if new_pid != o_pid:
+                    delta_hard += 1  # will be violated
+            elif tcode == 1:      # EXCLUSION: must NOT share period
+                if old_pid == o_pid:
+                    delta_hard -= 1  # was violated
+                if new_pid == o_pid:
+                    delta_hard += 1  # will be violated
+            elif tcode == 2:      # AFTER: exam_id must come after other
+                if old_pid <= o_pid:
+                    delta_hard -= 1  # was violated
+                if new_pid <= o_pid:
+                    delta_hard += 1  # will be violated
 
         return delta_hard * 100000 + delta_soft
 

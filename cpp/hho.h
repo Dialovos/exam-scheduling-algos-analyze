@@ -270,13 +270,15 @@ inline AlgoResult solve_hho(
                 }
             }
 
-            if (new_fit < fitness[i]) {
+            // Always verify with full_eval to prevent delta drift
+            double actual_fit = fe.full_eval(new_sol).fitness();
+            if (actual_fit < fitness[i]) {
                 population[i] = std::move(new_sol);
-                fitness[i] = new_fit;
+                fitness[i] = actual_fit;
             }
         }
 
-        // Periodic full re-sync
+        // Re-sync rabbit fitness
         if (t % 10 == 0)
             for (int i = 0; i < pop_size; i++)
                 fitness[i] = fe.full_eval(population[i]).fitness();
