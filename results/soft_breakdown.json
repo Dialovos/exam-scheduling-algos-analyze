@@ -1,11 +1,38 @@
 {
+  "Greedy": {
+    "two_in_a_row": 812,
+    "two_in_a_day": 235,
+    "period_spread": 465,
+    "non_mixed_durations": 28,
+    "front_load": 0,
+    "period_penalty": 0,
+    "room_penalty": 0
+  },
+  "Tabu Search": {
+    "two_in_a_row": 70,
+    "two_in_a_day": 70,
+    "period_spread": 123,
+    "non_mixed_durations": 24,
+    "front_load": 0,
+    "period_penalty": 0,
+    "room_penalty": 0
+  },
+  "HHO": {
+    "two_in_a_row": 42,
+    "two_in_a_day": 155,
+    "period_spread": 160,
+    "non_mixed_durations": 14,
+    "front_load": 5,
+    "period_penalty": 0,
+    "room_penalty": 0
+  },
   "IP": {
-    "two_in_a_row": 3438,
-    "two_in_a_day": 1585,
-    "period_spread": 1145,
-    "non_mixed_durations": 0,
-    "front_load": 65,
-    "period_penalty": 1000,
+    "two_in_a_row": 0,
+    "two_in_a_day": 340,
+    "period_spread": 217,
+    "non_mixed_durations": 20,
+    "front_load": 5,
+    "period_penalty": 0,
     "room_penalty": 0
   }
 }
