@@ -108,6 +108,49 @@ def _load_solution(problem: ProblemInstance, sln_path: str) -> Solution:
     return sol
 
 
+def _run_python_fallback(problem, algo='all', tabu_iters=200, tabu_tenure=15,
+                         tabu_patience=50, hho_pop=30, hho_iters=100,
+                         seed=42, verbose=True):
+    """Run Python implementations when C++ binary is unavailable."""
+    from algorithms.greedy import solve_greedy
+    from algorithms.tabu_search import solve_tabu
+    from algorithms.hho import solve_hho
+
+    results = {}
+
+    if algo in ('all', 'greedy'):
+        if verbose:
+            print(f"\n{'─'*50}\nGreedy (Python)...")
+        r = solve_greedy(problem, verbose=verbose, seed=seed)
+        r['evaluation'] = _py_to_eval(r['evaluation'])
+        results['Greedy'] = r
+
+    if algo in ('all', 'tabu'):
+        if verbose:
+            print(f"\n{'─'*50}\nTabu Search (Python, iters={tabu_iters})...")
+        r = solve_tabu(problem, max_iterations=tabu_iters,
+                       tabu_tenure=tabu_tenure, patience=tabu_patience,
+                       seed=seed, verbose=verbose)
+        r['evaluation'] = _py_to_eval(r['evaluation'])
+        results['Tabu Search'] = r
+
+    if algo in ('all', 'hho'):
+        if verbose:
+            print(f"\n{'─'*50}\nHHO (Python, pop={hho_pop}, iters={hho_iters})...")
+        r = solve_hho(problem, population_size=hho_pop,
+                      max_iterations=hho_iters, seed=seed, verbose=verbose)
+        r['evaluation'] = _py_to_eval(r['evaluation'])
+        results['HHO'] = r
+
+    return results
+
+
+def _py_to_eval(ev):
+    """Convert EvalBreakdown to be compatible with the bridge's expected format."""
+    # EvalBreakdown already has .feasible, .hard, .soft, and all component attrs
+    return ev
+
+
 def run_cpp_solver(
     exam_filepath: str,
     problem: ProblemInstance,
@@ -131,8 +174,12 @@ def run_cpp_solver(
     """
     binary = _get_binary()
     if binary is None:
-        print("[C++ Bridge] Binary not available, falling back to Python.")
-        return None
+        print("[C++ Bridge] Binary not available, using Python solvers.")
+        return _run_python_fallback(
+            problem, algo=algo,
+            tabu_iters=tabu_iters, tabu_tenure=tabu_tenure,
+            tabu_patience=tabu_patience, hho_pop=hho_pop,
+            hho_iters=hho_iters, seed=seed, verbose=verbose)
 
     os.makedirs(output_dir, exist_ok=True)
 

@@ -12,10 +12,15 @@ Given exams, students, time periods, and rooms: assign every exam to exactly one
 ## Quick Start:
 
 ```bash
-# Build the C++
-g++ -O3 -std=c++20 -o cpp/exam_solver cpp/main.cpp
+# ---- Build C++ ----
+# Linux:
+make
 
-#  Install py deps
+# Windows: If you have 'make' via MSYS2, 'make' also works.
+g++ -O3 -std=c++20 -o cpp/exam_solver.exe cpp/main.cpp
+
+
+# ---- Install py deps ----
 pip install -r requirements.txt
 
 # ---- Guide ----
@@ -31,9 +36,12 @@ python main.py --dataset datasets/exam_comp_set4.exam --algo ip --limit 100
 python main.py --dataset datasets/exam_comp_set4.exam --tabu-iters 5000 --hho-pop 100 --hho-iters 1000
 
 # Run C++ directly
+# Linux:
 ./cpp/exam_solver datasets/exam_comp_set4.exam --algo all --tabu-iters 2000 --hho-pop 50 --hho-iters 500 -v
+# Windows:
+cpp\exam_solver.exe datasets\exam_comp_set4.exam --algo all --tabu-iters 2000 --hho-pop 50 --hho-iters 500 -v
 
-# synthetic instance
+# Synthetic data
 python main.py --mode demo --size 200
 ```
 
@@ -42,36 +50,38 @@ python main.py --mode demo --size 200
 ```
 exam_scheduling/
 ├── main.py
-├── Makefile
-├── requirements.txt
+├── Makefile                 # Build C++ solver
+├── requirements.txt         # Python dependencies
 │
 ├── cpp/
 │   ├── main.cpp
-│   ├── models.h
+│   ├── models.h             # Exam, Period, Room, Solution, EvalResult
 │   ├── parser.h
-│   ├── evaluator.h
+│   ├── evaluator.h          # Full eval + O(k) incremental delta
 │   ├── greedy.h
 │   ├── tabu.h
 │   └── hho.h
 │
 ├── algorithms/
-│   ├── cpp_bridge.py
-│   └── ip_solver.py
+│   ├── cpp_bridge.py        # Calls C++ binary, falls back to Python
+│   ├── ip_solver.py
+│   ├── greedy.py
+│   ├── tabu_search.py
+│   └── hho.py
 │
 ├── data/
 │   ├── models.py
 │   ├── evaluator.py
 │   ├── fast_eval.py
 │   ├── parser.py
-│   └── generator.py
+│   └── generator.py         # Synthetic data generator
 │
 ├── utils/
 │   ├── plotting.py
 │   └── benchmark.py
 │
 ├── datasets/
-├── results/
-└── .vscode/
+└── results/
 ```
 
 ## ITC 2007 Dataset Support:

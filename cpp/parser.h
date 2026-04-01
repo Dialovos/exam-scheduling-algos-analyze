@@ -185,4 +185,4 @@ inline ProblemInstance parse_exam_file(const std::string& filepath, int limit = 
     return prob;
 }
 
-} // namespace parser
+}
