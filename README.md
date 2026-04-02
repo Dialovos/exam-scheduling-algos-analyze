@@ -11,11 +11,14 @@ Given exams, students, time periods, and rooms: assign every exam to exactly one
 
 ## Quick Start:
 
+- Use Jupiter Notebook for an interactive experiment otherwise follow these command below if necessary 
+
 ```bash
 # ---- Build C++ ----
 # Linux:
 make
 
+# If you don't have g++, install MSYS2 and run 'pacman -S mingw-w64-x86_64-gcc' inside it, then add its bin/ folder to your system PATH.
 # Windows: If you have 'make' via MSYS2, 'make' also works.
 g++ -O3 -std=c++20 -o cpp/exam_solver.exe cpp/main.cpp
 
@@ -45,11 +48,23 @@ cpp\exam_solver.exe datasets\exam_comp_set4.exam --algo all --tabu-iters 2000 --
 python main.py --mode demo --size 200
 ```
 
+## Algorithms
+
+| Algorithm | Language | Description |
+|---|---|---|
+| **Greedy** | C++ | DSatur graph-coloring |
+| **Tabu Search** | C++ | Feasibility-first local search |
+| **HHO** | C++ | Population metaheuristic with Lévy flights |
+| **IP** | Python | Constraint via OR-Tools CP-SAT |
+
+All C++ algorithms are called from Python via `cpp_bridge.py`. If the C++ binary is unavailable, equivalent Python fallbacks run automatically.
+
 ## Project Structure
 
 ```
 exam_scheduling/
 ├── main.py
+├── exam_scheduling.ipynb
 ├── Makefile                 # Build C++ solver
 ├── requirements.txt         # Python dependencies
 │
@@ -77,6 +92,7 @@ exam_scheduling/
 │   └── generator.py         # Synthetic data generator
 │
 ├── utils/
+│   ├── results_logger.py
 │   ├── plotting.py
 │   └── benchmark.py
 │
@@ -86,8 +102,12 @@ exam_scheduling/
 
 ## ITC 2007 Dataset Support:
 
-Official datasets from: https://www.eeecs.qub.ac.uk/itc2007/examtrack/
-The synthetic generator also outputs in this format, so you can mix real and synthetic instances.
+- Official datasets from (set 1-8): https://www.eeecs.qub.ac.uk/itc2007/examtrack/
+- The synthetic generator also outputs in this format, so you can mix real and synthetic instances.
+
+## GenAI Usage Disclosure
+
+Majority of the algorithmic code implementation was generated using AI for the purpose of research. The result testing and technical research reporting remain done by a non-AI entity.
 
 ## References:
 

@@ -3,6 +3,11 @@ C++ Solver Bridge — calls the compiled C++ exam_solver binary via subprocess
 and returns results in the same format as the Python algorithms.
 
 Falls back to Python implementations if the binary is not found.
+
+Quick usage (for notebooks):
+    from algorithms.cpp_bridge import run_solver
+    results = run_solver("datasets/exam_comp_set4.exam", algo="all")
+    results = run_solver(problem_instance, algo="tabu", tabu_iters=2000)
 """
 
 import json
@@ -10,10 +15,68 @@ import os
 import subprocess
 import sys
 import time
+import tempfile
 from pathlib import Path
 
 from data.models import ProblemInstance, Solution
 from data.fast_eval import FastEvaluator, EvalBreakdown
+
+
+def run_solver(
+    problem_or_path,
+    algo: str = 'all',
+    tabu_iters: int = 2000,
+    tabu_tenure: int = 20,
+    tabu_patience: int = 500,
+    hho_pop: int = 30,
+    hho_iters: int = 200,
+    seed: int = 42,
+    limit: int = 0,
+    output_dir: str = 'results',
+    verbose: bool = False,
+) -> dict:
+    """Run C++ solver on a dataset file or ProblemInstance.
+
+    This is the primary interface for notebooks.  It handles:
+      - ProblemInstance objects (writes temp .exam file automatically)
+      - Filepath strings (passes directly to C++)
+      - Automatic C++ binary discovery + compilation
+      - Python fallback if C++ unavailable
+
+    Args:
+        problem_or_path: either a filepath str or a ProblemInstance
+        algo: "greedy", "tabu", "hho", or "all"
+        (remaining args): algorithm configuration
+
+    Returns:
+        dict: {algo_name: {'solution': Solution, 'runtime': float,
+               'evaluation': EvalBreakdown, 'algorithm': str, 'iterations': int}}
+    """
+    from data.parser import parse_itc2007_exam
+    from data.generator import write_itc2007_format
+
+    # Resolve filepath and problem
+    if isinstance(problem_or_path, str):
+        filepath = problem_or_path
+        problem = parse_itc2007_exam(filepath, limit=limit)
+    elif isinstance(problem_or_path, ProblemInstance):
+        problem = problem_or_path
+        if problem.conflict_matrix is None:
+            problem.build_derived_data()
+        # Write to temp file for C++ binary
+        os.makedirs(output_dir, exist_ok=True)
+        filepath = os.path.join(output_dir, f"_tmp_{id(problem)}.exam")
+        write_itc2007_format(problem, filepath)
+    else:
+        raise TypeError(f"Expected str or ProblemInstance, got {type(problem_or_path)}")
+
+    return run_cpp_solver(
+        filepath, problem, algo=algo, limit=limit,
+        tabu_iters=tabu_iters, tabu_tenure=tabu_tenure,
+        tabu_patience=tabu_patience, hho_pop=hho_pop,
+        hho_iters=hho_iters, seed=seed,
+        output_dir=output_dir, verbose=verbose,
+    )
 
 
 def _find_binary():
