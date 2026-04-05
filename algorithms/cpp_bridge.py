@@ -30,6 +30,10 @@ def run_solver(
     tabu_patience: int = 500,
     hho_pop: int = 30,
     hho_iters: int = 200,
+    sa_iters: int = 5000,
+    kempe_iters: int = 3000,
+    alns_iters: int = 2000,
+    gd_iters: int = 5000,
     seed: int = 42,
     limit: int = 0,
     output_dir: str = 'results',
@@ -74,7 +78,9 @@ def run_solver(
         filepath, problem, algo=algo, limit=limit,
         tabu_iters=tabu_iters, tabu_tenure=tabu_tenure,
         tabu_patience=tabu_patience, hho_pop=hho_pop,
-        hho_iters=hho_iters, seed=seed,
+        hho_iters=hho_iters, sa_iters=sa_iters,
+        kempe_iters=kempe_iters, alns_iters=alns_iters,
+        gd_iters=gd_iters, seed=seed,
         output_dir=output_dir, verbose=verbose,
     )
 
@@ -173,11 +179,16 @@ def _load_solution(problem: ProblemInstance, sln_path: str) -> Solution:
 
 def _run_python_fallback(problem, algo='all', tabu_iters=200, tabu_tenure=15,
                          tabu_patience=50, hho_pop=30, hho_iters=100,
-                         seed=42, verbose=True):
+                         sa_iters=5000, kempe_iters=3000, alns_iters=2000,
+                         gd_iters=5000, seed=42, verbose=True):
     """Run Python implementations when C++ binary is unavailable."""
     from algorithms.greedy import solve_greedy
     from algorithms.tabu_search import solve_tabu
     from algorithms.hho import solve_hho
+    from algorithms.kempe_chain import solve_kempe
+    from algorithms.simulated_annealing import solve_sa
+    from algorithms.alns import solve_alns
+    from algorithms.great_deluge import solve_great_deluge
 
     results = {}
 
@@ -205,6 +216,38 @@ def _run_python_fallback(problem, algo='all', tabu_iters=200, tabu_tenure=15,
         r['evaluation'] = _py_to_eval(r['evaluation'])
         results['HHO'] = r
 
+    if algo in ('all', 'kempe'):
+        if verbose:
+            print(f"\n{'─'*50}\nKempe Chain (Python, iters={kempe_iters})...")
+        r = solve_kempe(problem, max_iterations=kempe_iters,
+                        seed=seed, verbose=verbose)
+        r['evaluation'] = _py_to_eval(r['evaluation'])
+        results['Kempe Chain'] = r
+
+    if algo in ('all', 'sa'):
+        if verbose:
+            print(f"\n{'─'*50}\nSimulated Annealing (Python, iters={sa_iters})...")
+        r = solve_sa(problem, max_iterations=sa_iters,
+                     seed=seed, verbose=verbose)
+        r['evaluation'] = _py_to_eval(r['evaluation'])
+        results['Simulated Annealing'] = r
+
+    if algo in ('all', 'alns'):
+        if verbose:
+            print(f"\n{'─'*50}\nALNS (Python, iters={alns_iters})...")
+        r = solve_alns(problem, max_iterations=alns_iters,
+                       seed=seed, verbose=verbose)
+        r['evaluation'] = _py_to_eval(r['evaluation'])
+        results['ALNS'] = r
+
+    if algo in ('all', 'gd'):
+        if verbose:
+            print(f"\n{'─'*50}\nGreat Deluge (Python, iters={gd_iters})...")
+        r = solve_great_deluge(problem, max_iterations=gd_iters,
+                               seed=seed, verbose=verbose)
+        r['evaluation'] = _py_to_eval(r['evaluation'])
+        results['Great Deluge'] = r
+
     return results
 
 
@@ -224,6 +267,10 @@ def run_cpp_solver(
     tabu_patience: int = 50,
     hho_pop: int = 30,
     hho_iters: int = 100,
+    sa_iters: int = 5000,
+    kempe_iters: int = 3000,
+    alns_iters: int = 2000,
+    gd_iters: int = 5000,
     seed: int = 42,
     output_dir: str = 'results',
     verbose: bool = True,
@@ -242,7 +289,9 @@ def run_cpp_solver(
             problem, algo=algo,
             tabu_iters=tabu_iters, tabu_tenure=tabu_tenure,
             tabu_patience=tabu_patience, hho_pop=hho_pop,
-            hho_iters=hho_iters, seed=seed, verbose=verbose)
+            hho_iters=hho_iters, sa_iters=sa_iters,
+            kempe_iters=kempe_iters, alns_iters=alns_iters,
+            gd_iters=gd_iters, seed=seed, verbose=verbose)
 
     os.makedirs(output_dir, exist_ok=True)
 
@@ -255,6 +304,10 @@ def run_cpp_solver(
         '--tabu-patience', str(tabu_patience),
         '--hho-pop', str(hho_pop),
         '--hho-iters', str(hho_iters),
+        '--sa-iters', str(sa_iters),
+        '--kempe-iters', str(kempe_iters),
+        '--alns-iters', str(alns_iters),
+        '--gd-iters', str(gd_iters),
         '--seed', str(seed),
         '--output-dir', output_dir,
     ]

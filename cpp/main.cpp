@@ -19,6 +19,10 @@
 #include "greedy.h"
 #include "tabu.h"
 #include "hho.h"
+#include "kempe.h"
+#include "sa.h"
+#include "alns.h"
+#include "gd.h"
 
 #include <fstream>
 #include <iomanip>
@@ -75,6 +79,10 @@ int main(int argc, char* argv[]) {
     int tabu_patience   = 50;
     int hho_pop         = 30;
     int hho_iters       = 100;
+    int sa_iters        = 5000;
+    int kempe_iters     = 3000;
+    int alns_iters      = 2000;
+    int gd_iters        = 5000;
     int seed            = 42;
     string output_dir   = "results";
     bool verbose        = false;
@@ -88,6 +96,10 @@ int main(int argc, char* argv[]) {
         else if (arg == "--tabu-patience"  && i+1 < argc) tabu_patience = stoi(argv[++i]);
         else if (arg == "--hho-pop"        && i+1 < argc) hho_pop       = stoi(argv[++i]);
         else if (arg == "--hho-iters"      && i+1 < argc) hho_iters     = stoi(argv[++i]);
+        else if (arg == "--sa-iters"       && i+1 < argc) sa_iters      = stoi(argv[++i]);
+        else if (arg == "--kempe-iters"    && i+1 < argc) kempe_iters   = stoi(argv[++i]);
+        else if (arg == "--alns-iters"     && i+1 < argc) alns_iters    = stoi(argv[++i]);
+        else if (arg == "--gd-iters"       && i+1 < argc) gd_iters      = stoi(argv[++i]);
         else if (arg == "--seed"           && i+1 < argc) seed          = stoi(argv[++i]);
         else if (arg == "--output-dir"     && i+1 < argc) output_dir    = argv[++i];
         else if (arg == "--verbose" || arg == "-v")        verbose       = true;
@@ -97,13 +109,17 @@ int main(int argc, char* argv[]) {
     if (filepath.empty()) {
         cerr << "Usage: exam_solver <file.exam> [options]\n"
              << "\nOptions:\n"
-             << "  --algo greedy|tabu|hho|all   Algorithm to run (default: all)\n"
+             << "  --algo greedy|tabu|hho|kempe|sa|alns|gd|all  Algorithm (default: all)\n"
              << "  --limit N                    Load only first N exams (0=all)\n"
              << "  --tabu-iters N               Tabu max iterations (default: 200)\n"
              << "  --tabu-tenure N              Tabu tenure (default: 15)\n"
              << "  --tabu-patience N            Tabu patience (default: 50)\n"
              << "  --hho-pop N                  HHO population size (default: 30)\n"
              << "  --hho-iters N                HHO max iterations (default: 100)\n"
+             << "  --sa-iters N                 SA iterations (default: 5000)\n"
+             << "  --kempe-iters N              Kempe Chain iterations (default: 3000)\n"
+             << "  --alns-iters N               ALNS iterations (default: 2000)\n"
+             << "  --gd-iters N                 Great Deluge iterations (default: 5000)\n"
              << "  --seed N                     Random seed (default: 42)\n"
              << "  --output-dir DIR             Output directory (default: results)\n"
              << "  -v, --verbose                Print progress to stderr\n";
@@ -141,6 +157,26 @@ int main(int argc, char* argv[]) {
     if (algo == "all" || algo == "hho") {
         auto r = solve_hho(prob, hho_pop, hho_iters, seed, verbose);
         write_solution_file(r.sol, output_dir + "/solution_hho_" + ne_str + ".sln");
+        results.push_back(move(r));
+    }
+    if (algo == "all" || algo == "kempe") {
+        auto r = solve_kempe(prob, kempe_iters, seed, verbose);
+        write_solution_file(r.sol, output_dir + "/solution_kempe_chain_" + ne_str + ".sln");
+        results.push_back(move(r));
+    }
+    if (algo == "all" || algo == "sa") {
+        auto r = solve_sa(prob, sa_iters, 0.0, 0.9995, seed, verbose);
+        write_solution_file(r.sol, output_dir + "/solution_simulated_annealing_" + ne_str + ".sln");
+        results.push_back(move(r));
+    }
+    if (algo == "all" || algo == "alns") {
+        auto r = solve_alns(prob, alns_iters, 0.15, seed, verbose);
+        write_solution_file(r.sol, output_dir + "/solution_alns_" + ne_str + ".sln");
+        results.push_back(move(r));
+    }
+    if (algo == "all" || algo == "gd") {
+        auto r = solve_great_deluge(prob, gd_iters, 0.0, seed, verbose);
+        write_solution_file(r.sol, output_dir + "/solution_great_deluge_" + ne_str + ".sln");
         results.push_back(move(r));
     }
 
