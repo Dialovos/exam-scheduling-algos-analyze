@@ -170,19 +170,34 @@ inline void repair_greedy(
         const auto& vp = valid_p[eid];
         const auto& vr = valid_r[eid];
         int best_pid = -1, best_rid = -1;
-        int best_cost = INT_MAX;
+        long long best_cost = (long long)1e18;
 
-        int p_limit = std::min((int)vp.size(), 15);
-        int r_limit = std::min((int)vr.size(), 5);
-
-        for (int pi = 0; pi < p_limit; pi++) {
-            int pid = vp[pi];
-            for (int ri = 0; ri < r_limit; ri++) {
-                int rid = vr[ri];
-                int cost = 0;
+        for (int pid : vp) {
+            for (int rid : vr) {
+                long long cost = 0;
+                // Hard: student conflicts
                 for (auto& [nb, _] : fe.P.adj[eid])
                     if (sol.period_of[nb] == pid) cost += 100000;
+                // Hard: room capacity
+                if (sol.get_pr_enroll(pid, rid) + fe.exam_enroll[eid] > fe.room_cap[rid])
+                    cost += 100000;
+                // Soft: proximity
+                for (auto& [nb, _] : fe.P.adj[eid]) {
+                    int nb_pid = sol.period_of[nb];
+                    if (nb_pid < 0 || nb_pid == pid) continue;
+                    int gap = std::abs(pid - nb_pid);
+                    if (gap > 0 && gap <= fe.w_spread) cost += 1;
+                    if (fe.period_day[pid] == fe.period_day[nb_pid]) {
+                        int g = std::abs(fe.period_daypos[pid] - fe.period_daypos[nb_pid]);
+                        if (g == 1) cost += fe.w_2row;
+                        else if (g > 1) cost += fe.w_2day;
+                    }
+                }
+                // Soft: penalties
                 cost += fe.period_pen[pid] + fe.room_pen[rid];
+                // Soft: front load
+                if (fe.large_exams.count(eid) && fe.fl_penalty > 0 && fe.last_periods.count(pid))
+                    cost += fe.fl_penalty;
                 if (cost < best_cost) {
                     best_cost = cost;
                     best_pid = pid;
@@ -249,15 +264,45 @@ inline AlgoResult solve_alns(
     Solution sol = greedy_res.sol.copy();
 
     EvalResult ev = fe.full_eval(sol);
+
+    // Feasibility recovery if greedy started infeasible
+    if (!ev.feasible()) {
+        if (verbose)
+            std::cerr << "[ALNS] Greedy infeasible (hard=" << ev.hard()
+                      << "), running recovery..." << std::endl;
+        fe.recover_feasibility(sol, 500, seed);
+        ev = fe.full_eval(sol);
+        if (verbose)
+            std::cerr << "[ALNS] After recovery: feasible=" << ev.feasible()
+                      << " hard=" << ev.hard() << " soft=" << ev.soft() << std::endl;
+    }
+
     double current_fitness = ev.fitness();
     Solution best_sol = sol.copy();
     double best_fitness = current_fitness;
+    bool best_feasible = ev.feasible();
 
     int n_destroy = std::max(1, (int)(ne * destroy_pct));
 
-    // SA acceptance
-    double temp = (ev.soft() > 0) ? std::max(1.0, ev.soft() * 0.02) : 50.0;
-    double cooling_rate = 0.9998;
+    // SA acceptance — calibrate from random soft-only move deltas
+    double temp;
+    {
+        double avg_worsen = 0; int n_w = 0;
+        std::uniform_int_distribution<int> sde(0, ne - 1);
+        for (int s = 0; s < 200; s++) {
+            int eid = sde(rng);
+            if (valid_p[eid].empty() || valid_r[eid].empty()) continue;
+            int pid = valid_p[eid][rng() % valid_p[eid].size()];
+            int rid = valid_r[eid][rng() % valid_r[eid].size()];
+            double d = fe.move_delta(sol, eid, pid, rid);
+            if (d > 0 && d < 50000) { avg_worsen += d; n_w++; }
+        }
+        // Scale: destroy/repair affects n_destroy exams, so deltas are ~sqrt(n_destroy) larger
+        double base_temp = (n_w > 0) ? (avg_worsen / n_w) / 0.693 : 100.0;
+        temp = std::max(1.0, base_temp * std::sqrt((double)n_destroy));
+    }
+    double init_temp = temp;
+    double cooling_rate = 0.999;
 
     // Operator weights
     std::vector<double> d_weights = {1.0, 1.0, 1.0};
@@ -311,9 +356,12 @@ inline AlgoResult solve_alns(
         if (accept) {
             current_fitness = new_fitness;
             score = 1.0;
-            if (new_fitness < best_fitness) {
+            bool nf = new_ev.feasible();
+            bool dominated = (best_feasible && !nf);
+            if (!dominated && new_fitness < best_fitness) {
                 best_sol = sol.copy();
                 best_fitness = new_fitness;
+                best_feasible = nf;
                 score = 3.0;
                 if (verbose && (it < 10 || it % 200 == 0))
                     std::cerr << "[ALNS] Iter " << it << ": best hard=" << new_ev.hard()
@@ -340,6 +388,10 @@ inline AlgoResult solve_alns(
         }
 
         temp *= cooling_rate;
+
+        // Reheat when stuck
+        if ((it + 1) % 200 == 0 && current_fitness >= best_fitness)
+            temp = std::max(temp, init_temp * 0.3);
     }
 
     auto t1 = std::chrono::high_resolution_clock::now();

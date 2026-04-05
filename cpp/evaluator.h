@@ -15,6 +15,7 @@
 #include <cstdlib>
 #include <map>
 #include <numeric>
+#include <random>
 #include <set>
 #include <vector>
 
@@ -333,5 +334,185 @@ public:
 
     void apply_move(Solution& sol, int eid, int new_pid, int new_rid) const {
         sol.assign(eid, new_pid, new_rid);
+    }
+
+    // ── Feasibility recovery phase ──────────────────────────
+    // Aggressive hard-violation reduction for infeasible initial solutions.
+    // Returns true if a feasible solution was found.
+
+    bool recover_feasibility(Solution& sol, int max_rounds = 1000, int seed = 42) const {
+        std::mt19937 rng(seed);
+
+        // Random-greedy construction: builds a new solution from scratch
+        // avoiding conflicts where possible, using random order
+        auto random_greedy_init = [&](int rseed) -> Solution {
+            std::mt19937 lrng(rseed);
+            Solution ns;
+            ns.init(P);
+            std::vector<int> order(ne);
+            std::iota(order.begin(), order.end(), 0);
+            std::shuffle(order.begin(), order.end(), lrng);
+
+            for (int eid : order) {
+                // Find periods where no conflict neighbor is placed
+                std::set<int> blocked;
+                for (auto& [nb, _] : P.adj[eid])
+                    if (ns.period_of[nb] >= 0) blocked.insert(ns.period_of[nb]);
+                // Also block exclusion periods
+                for (auto& [other, tcode] : phc_by_exam[eid]) {
+                    int op = ns.period_of[other]; if (op < 0) continue;
+                    if (tcode == 1) blocked.insert(op); // EXCLUSION
+                }
+
+                std::vector<int> avail;
+                for (int p = 0; p < np; p++)
+                    if (!blocked.count(p) && exam_dur[eid] <= period_dur[p])
+                        avail.push_back(p);
+                if (avail.empty())
+                    for (int p = 0; p < np; p++)
+                        if (exam_dur[eid] <= period_dur[p]) avail.push_back(p);
+
+                std::shuffle(avail.begin(), avail.end(), lrng);
+
+                bool placed = false;
+                for (int pid : avail) {
+                    for (int rid = 0; rid < nr; rid++) {
+                        if (ns.get_pr_enroll(pid, rid) + exam_enroll[eid] <= room_cap[rid]) {
+                            ns.assign(eid, pid, rid);
+                            placed = true; break;
+                        }
+                    }
+                    if (placed) break;
+                }
+                if (!placed) {
+                    int pid = avail.empty() ? 0 : avail[0];
+                    ns.assign(eid, pid, lrng() % nr);
+                }
+            }
+            return ns;
+        };
+
+        auto get_bad = [&]() -> std::vector<int> {
+            std::vector<bool> is_bad(ne, false);
+            for (int e = 0; e < ne; e++) {
+                int p = sol.period_of[e]; if (p < 0) continue;
+                for (auto& [nb, _] : P.adj[e])
+                    if (sol.period_of[nb] == p) { is_bad[e] = true; is_bad[nb] = true; }
+                if (sol.get_pr_enroll(p, sol.room_of[e]) > room_cap[sol.room_of[e]]) is_bad[e] = true;
+                if (exam_dur[e] > period_dur[p]) is_bad[e] = true;
+            }
+            for (auto& c : P.phcs) {
+                if (c.exam1 >= ne || c.exam2 >= ne) continue;
+                int p1 = sol.period_of[c.exam1], p2 = sol.period_of[c.exam2];
+                if (p1 < 0 || p2 < 0) continue;
+                bool v = (c.type == "EXAM_COINCIDENCE" && p1 != p2) ||
+                         (c.type == "EXCLUSION" && p1 == p2) ||
+                         (c.type == "AFTER" && p1 <= p2);
+                if (v) { is_bad[c.exam1] = true; is_bad[c.exam2] = true; }
+            }
+            std::vector<int> bad;
+            for (int e = 0; e < ne; e++) if (is_bad[e]) bad.push_back(e);
+            return bad;
+        };
+
+        double best_fit = full_eval(sol).fitness();
+        Solution best_sol = sol.copy();
+
+        for (int rnd = 0; rnd < max_rounds; rnd++) {
+            auto bad = get_bad();
+            if (bad.empty()) return true;
+
+            std::shuffle(bad.begin(), bad.end(), rng);
+
+            bool improved = false;
+
+            // Phase 1: steepest single moves for each bad exam
+            for (int eid : bad) {
+                int best_pid = -1, best_rid = -1;
+                double best_delta = 0;
+                for (int pid = 0; pid < np; pid++) {
+                    if (exam_dur[eid] > period_dur[pid]) continue;
+                    if (pid == sol.period_of[eid]) continue;
+                    for (int rid = 0; rid < nr; rid++) {
+                        if (exam_enroll[eid] > room_cap[rid]) continue;
+                        double d = move_delta(sol, eid, pid, rid);
+                        if (d < best_delta) {
+                            best_delta = d; best_pid = pid; best_rid = rid;
+                        }
+                    }
+                }
+                if (best_pid >= 0) {
+                    apply_move(sol, eid, best_pid, best_rid);
+                    improved = true;
+                }
+            }
+
+            // Phase 2: swap moves for pairs of bad exams
+            if (!improved || (rnd % 5 == 0 && !bad.empty())) {
+                int swap_limit = std::min((int)bad.size(), 10);
+                for (int i = 0; i < swap_limit; i++) {
+                    int ea = bad[i];
+                    int pa = sol.period_of[ea], ra = sol.room_of[ea];
+                    if (pa < 0) continue;
+
+                    // Try swapping with random exams in conflicting periods
+                    for (auto& [nb, _] : P.adj[ea]) {
+                        if (sol.period_of[nb] != pa) continue; // only conflicting
+                        int pb = sol.period_of[nb], rb = sol.room_of[nb];
+                        // Try moving ea to nb's period won't work (same period), so find alt periods
+                        for (int tp = 0; tp < np; tp++) {
+                            if (tp == pa) continue;
+                            if (exam_dur[ea] > period_dur[tp]) continue;
+                            double d1 = move_delta(sol, ea, tp, ra);
+                            if (d1 < 0) {
+                                apply_move(sol, ea, tp, ra);
+                                improved = true;
+                                break;
+                            }
+                        }
+                        if (sol.period_of[ea] != pa) break; // moved successfully
+                    }
+                }
+            }
+
+            double fit = full_eval(sol).fitness();
+            if (fit < best_fit) {
+                best_fit = fit;
+                best_sol = sol.copy();
+            }
+
+            if (!improved) {
+                // Stronger perturbation: kick random exams
+                std::uniform_int_distribution<int> de(0, ne - 1);
+                int kicks = std::max(5, ne / 30);
+                for (int k = 0; k < kicks; k++) {
+                    int e = de(rng);
+                    std::vector<int> vp, vr;
+                    for (int p = 0; p < np; p++)
+                        if (exam_dur[e] <= period_dur[p]) vp.push_back(p);
+                    for (int r = 0; r < nr; r++)
+                        if (exam_enroll[e] <= room_cap[r]) vr.push_back(r);
+                    if (vp.empty() || vr.empty()) continue;
+                    apply_move(sol, e, vp[rng() % vp.size()], vr[rng() % vr.size()]);
+                }
+            }
+
+            // Every 100 rounds, try a random-greedy restart
+            if (rnd > 0 && rnd % 100 == 0) {
+                Solution rs = random_greedy_init(seed + rnd);
+                double rf = full_eval(rs).fitness();
+                if (rf < best_fit) {
+                    best_fit = rf;
+                    best_sol = rs.copy();
+                    sol = std::move(rs);
+                } else if (full_eval(rs).hard() < full_eval(sol).hard()) {
+                    sol = std::move(rs);
+                }
+            }
+        }
+
+        // Restore best found
+        sol = best_sol.copy();
+        return full_eval(sol).feasible();
     }
 };

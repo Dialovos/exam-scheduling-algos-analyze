@@ -23,6 +23,7 @@ from data.generator import generate_synthetic, write_itc2007_format
 from data.parser import parse_itc2007_exam, write_solution_itc2007
 from algorithms.cpp_bridge import run_cpp_solver
 from utils.plotting import plot_soft_constraint_breakdown
+from utils.batch_manager import BatchManager
 
 try:
     from algorithms.ip_solver import solve_ip
@@ -66,7 +67,7 @@ def _save_soft_breakdown(results, output_dir):
     return breakdown
 
 
-def run_demo(size=50, algo=None, verbose=True, **kwargs):
+def run_demo(size=50, algo=None, verbose=True, output_dir='results', **kwargs):
     print(f"\n{'='*72}")
     print(f"  DEMO: {size}-exam synthetic instance")
     print(f"{'='*72}\n")
@@ -82,14 +83,14 @@ def run_demo(size=50, algo=None, verbose=True, **kwargs):
     exam_path = f"datasets/synthetic_{size}.exam"
     write_itc2007_format(problem, exam_path)
 
-    os.makedirs("results", exist_ok=True)
+    os.makedirs(output_dir, exist_ok=True)
     results = {}
 
     # C++ algorithms (greedy/tabu/hho)
     if algo != 'ip':
         cpp_algo = algo if algo else 'all'
         cpp_results = run_cpp_solver(
-            exam_path, problem, algo=cpp_algo, output_dir='results',
+            exam_path, problem, algo=cpp_algo, output_dir=output_dir,
             verbose=verbose, **kwargs)
         if cpp_results:
             results.update(cpp_results)
@@ -102,7 +103,7 @@ def run_demo(size=50, algo=None, verbose=True, **kwargs):
         results['IP'] = r
 
     _print_comparison(results)
-    bd = _save_soft_breakdown(results, "results")
+    bd = _save_soft_breakdown(results, output_dir)
     print(f"\n{'='*72}\n  SOFT CONSTRAINT BREAKDOWN\n{'='*72}")
     for name, b in bd.items():
         total = sum(b.values())
@@ -110,7 +111,7 @@ def run_demo(size=50, algo=None, verbose=True, **kwargs):
         print(f"{name:<25} total={total:>6}  [{', '.join(parts)}]")
 
 
-def run_on_dataset(filepath, limit=0, algo=None, verbose=True, **kwargs):
+def run_on_dataset(filepath, limit=0, algo=None, verbose=True, output_dir='results', **kwargs):
     limit_str = f" (limit={limit} exams)" if limit > 0 else " (full dataset)"
     algo_str = f" [{algo.upper()}]" if algo else ""
     print(f"\n{'='*72}")
@@ -120,7 +121,7 @@ def run_on_dataset(filepath, limit=0, algo=None, verbose=True, **kwargs):
     problem = parse_itc2007_exam(filepath, limit=limit)
     print(problem.summary())
 
-    os.makedirs("results", exist_ok=True)
+    os.makedirs(output_dir, exist_ok=True)
     results = {}
 
     # C++ algorithms
@@ -128,7 +129,7 @@ def run_on_dataset(filepath, limit=0, algo=None, verbose=True, **kwargs):
         cpp_algo = algo if algo else 'all'
         cpp_results = run_cpp_solver(
             filepath, problem, algo=cpp_algo, limit=limit,
-            output_dir='results', verbose=verbose, **kwargs)
+            output_dir=output_dir, verbose=verbose, **kwargs)
         if cpp_results:
             results.update(cpp_results)
 
@@ -144,12 +145,14 @@ def run_on_dataset(filepath, limit=0, algo=None, verbose=True, **kwargs):
             print(f"\n[IP] Skipped (n={ne} > 500)")
 
     _print_comparison(results)
-    _save_soft_breakdown(results, "results")
+    _save_soft_breakdown(results, output_dir)
 
+    sln_dir = os.path.join(output_dir, "solutions")
+    os.makedirs(sln_dir, exist_ok=True)
     for name, r in results.items():
         safe = name.lower().replace(' ', '_')
-        write_solution_itc2007(r['solution'], f"results/solution_{safe}_{problem.num_exams()}.sln")
-    print(f"\nSolutions saved to results/")
+        write_solution_itc2007(r['solution'], os.path.join(sln_dir, f"solution_{safe}_{problem.num_exams()}.sln"))
+    print(f"\nSolutions saved to {sln_dir}/")
 
 
 def main():
@@ -167,7 +170,7 @@ Examples:
   python main.py --mode plot
         """)
 
-    ap.add_argument('--mode', choices=['demo', 'plot'], default='demo')
+    ap.add_argument('--mode', choices=['demo', 'plot', 'batches'], default='demo')
     ap.add_argument('--algo', choices=['greedy', 'ip', 'tabu', 'hho', 'kempe', 'sa', 'alns', 'gd'])
     ap.add_argument('--size', type=int, default=50)
     ap.add_argument('--dataset', type=str)
@@ -175,6 +178,12 @@ Examples:
     ap.add_argument('--output', type=str, default='results')
     ap.add_argument('--quiet', action='store_true')
     ap.add_argument('--seed', type=int, default=42)
+    ap.add_argument('--batch', type=str, default=None,
+                    help='Batch name (auto-creates). Omit for auto-timestamped batch.')
+    ap.add_argument('--load-batch', type=str, default=None,
+                    help='Load existing batch by ID/name instead of creating new.')
+    ap.add_argument('--no-batch', action='store_true',
+                    help='Disable batching, write directly to results/.')
     ap.add_argument('--tabu-iters', type=int, default=2000)
     ap.add_argument('--tabu-patience', type=int, default=500)
     ap.add_argument('--hho-pop', type=int, default=50)
@@ -192,14 +201,30 @@ Examples:
               alns_iters=args.alns_iters, gd_iters=args.gd_iters,
               seed=args.seed)
 
+    # Resolve output directory via batch manager
+    if args.mode == 'batches':
+        bm = BatchManager()
+        bm.print_batches()
+        return
+
+    if args.no_batch:
+        output_dir = args.output
+    else:
+        bm = BatchManager(args.output)
+        if args.load_batch:
+            output_dir = bm.load_batch(args.load_batch)
+        else:
+            output_dir = bm.new_batch(args.batch)
+
     if args.dataset:
         run_on_dataset(args.dataset, limit=args.limit, algo=args.algo,
-                       verbose=verbose, **kw)
+                       verbose=verbose, output_dir=output_dir, **kw)
     elif args.mode == 'demo':
-        run_demo(size=args.size, algo=args.algo, verbose=verbose, **kw)
+        run_demo(size=args.size, algo=args.algo, verbose=verbose,
+                 output_dir=output_dir, **kw)
     elif args.mode == 'plot':
         from utils.plotting import generate_all_plots
-        generate_all_plots(args.output)
+        generate_all_plots(output_dir)
 
 
 if __name__ == '__main__':
