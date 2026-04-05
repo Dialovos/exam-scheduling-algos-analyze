@@ -7,7 +7,7 @@ BIN      = cpp/exam_solver
 
 all: $(BIN)
 
-$(BIN): cpp/main.cpp cpp/models.h cpp/parser.h cpp/evaluator.h cpp/greedy.h cpp/tabu.h cpp/hho.h
+$(BIN): cpp/main.cpp cpp/models.h cpp/parser.h cpp/evaluator.h cpp/greedy.h cpp/tabu.h cpp/hho.h cpp/kempe.h cpp/sa.h cpp/alns.h cpp/gd.h
 	$(CXX) $(CXXFLAGS) -o $@ cpp/main.cpp
 	@echo "Built: $@"
 

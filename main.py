@@ -157,7 +157,7 @@ def main():
         description="Exam Scheduling Benchmark Suite v3 (C++ Optimized)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Algorithms:  greedy, tabu, hho → C++  |  ip → Python (PuLP/CBC)
+Algorithms:  greedy, tabu, hho, kempe, sa, alns, gd → C++  |  ip → Python (OR-Tools)
 
 Examples:
   python main.py                                        # Demo 50 exams
@@ -168,7 +168,7 @@ Examples:
         """)
 
     ap.add_argument('--mode', choices=['demo', 'plot'], default='demo')
-    ap.add_argument('--algo', choices=['greedy', 'ip', 'tabu', 'hho'])
+    ap.add_argument('--algo', choices=['greedy', 'ip', 'tabu', 'hho', 'kempe', 'sa', 'alns', 'gd'])
     ap.add_argument('--size', type=int, default=50)
     ap.add_argument('--dataset', type=str)
     ap.add_argument('--limit', type=int, default=0)
@@ -179,11 +179,18 @@ Examples:
     ap.add_argument('--tabu-patience', type=int, default=500)
     ap.add_argument('--hho-pop', type=int, default=50)
     ap.add_argument('--hho-iters', type=int, default=500)
+    ap.add_argument('--sa-iters', type=int, default=5000)
+    ap.add_argument('--kempe-iters', type=int, default=3000)
+    ap.add_argument('--alns-iters', type=int, default=2000)
+    ap.add_argument('--gd-iters', type=int, default=5000)
 
     args = ap.parse_args()
     verbose = not args.quiet
     kw = dict(tabu_iters=args.tabu_iters, tabu_patience=args.tabu_patience,
-              hho_pop=args.hho_pop, hho_iters=args.hho_iters, seed=args.seed)
+              hho_pop=args.hho_pop, hho_iters=args.hho_iters,
+              sa_iters=args.sa_iters, kempe_iters=args.kempe_iters,
+              alns_iters=args.alns_iters, gd_iters=args.gd_iters,
+              seed=args.seed)
 
     if args.dataset:
         run_on_dataset(args.dataset, limit=args.limit, algo=args.algo,

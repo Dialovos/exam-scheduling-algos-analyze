@@ -5,7 +5,7 @@ Models real ITC 2007 characteristics analyzed from sets 4, 5, and 7:
   - Tight period counts (max_degree >> num_periods, many exams per period)
   - Multiple exam/period durations, period and room penalties
   - COINCIDENCE, EXCLUSION, AFTER hard constraints
-  - Varied room capacities (10×+ range)
+  - Varied room capacities (10x+ range)
 
 Presets (n=200):
   "easy"        — 60 periods, 3 rooms, few constraints
@@ -15,6 +15,7 @@ Presets (n=200):
 """
 
 import random
+import numpy as np
 from data.models import (
     ProblemInstance, Exam, Period, Room,
     PeriodHardConstraint, RoomHardConstraint,
@@ -76,6 +77,7 @@ def generate_synthetic(
         **overrides: Override any preset parameter.
     """
     rng = random.Random(seed)
+    nprng = np.random.default_rng(seed)
     cfg = dict(PRESETS.get(preset, PRESETS["medium"]))
     cfg.update(overrides)
 
@@ -85,7 +87,6 @@ def generate_synthetic(
     # ── Periods: tight count based on period_ratio ──
     ppd = cfg['periods_per_day']
     np_ = max(3, int(ne * cfg['period_ratio']))
-    # Round up to multiple of ppd
     num_days = max(1, (np_ + ppd - 1) // ppd)
     np_ = num_days * ppd
 
@@ -103,8 +104,11 @@ def generate_synthetic(
 
     # Period penalties
     n_pp = max(0, int(np_ * cfg['period_penalty_frac']))
-    for _ in range(n_pp):
-        periods[rng.randint(0, np_-1)].penalty = rng.choice([50, 100, 200, 500])
+    if n_pp > 0:
+        pp_indices = nprng.integers(0, np_, size=n_pp)
+        pp_vals = nprng.choice([50, 100, 200, 500], size=n_pp)
+        for idx, val in zip(pp_indices, pp_vals):
+            periods[idx].penalty = int(val)
 
     # ── Rooms ──
     nr = max(1, int(ne * cfg['room_count_ratio']))
@@ -112,73 +116,89 @@ def generate_synthetic(
     base = cfg['room_cap_base']
     spread = cfg['room_cap_spread']
     if nr == 1:
-        # Single large room — capacity must hold many exams per period
         exams_per_period = ne / np_
         cap = max(500, int(num_students * 0.3), int(exams_per_period * base * 0.3))
         rooms.append(Room(id=0, capacity=cap, penalty=0))
     else:
-        for rid in range(nr):
-            if rid == 0:
-                cap = int(base * (2.0 + rng.random()))
-            else:
-                cap = max(20, int(base * (0.15 + rng.random() * (1.0 + spread))))
-            rooms.append(Room(id=rid, capacity=cap, penalty=0))
-        rooms.sort(key=lambda r: -r.capacity)
-        for i, r in enumerate(rooms): r.id = i
+        caps = np.empty(nr, dtype=int)
+        caps[0] = int(base * (2.0 + nprng.random()))
+        caps[1:] = np.maximum(20, (base * (0.15 + nprng.random(nr - 1) * (1.0 + spread))).astype(int))
+        order = np.argsort(-caps)
+        for i, idx in enumerate(order):
+            rooms.append(Room(id=i, capacity=int(caps[idx]), penalty=0))
 
     n_rp = max(0, int(nr * cfg['room_penalty_frac']))
-    for _ in range(n_rp):
-        rooms[rng.randint(0, nr-1)].penalty = rng.choice([30, 50, 70, 100])
+    if n_rp > 0:
+        rp_indices = nprng.integers(0, nr, size=n_rp)
+        rp_vals = nprng.choice([30, 50, 70, 100], size=n_rp)
+        for idx, val in zip(rp_indices, rp_vals):
+            rooms[idx].penalty = int(val)
 
     max_cap = max(r.capacity for r in rooms)
 
     # ── Exams (power-law enrollment) ──
-    dur_pool = [60, 90, 120, 150, 180]
-    dur_w = [3, 2, 3, 1, 2]
-    exams = []
-    for eid in range(ne):
-        dur = rng.choices(dur_pool, weights=dur_w, k=1)[0]
-        exams.append(Exam(id=eid, duration=dur, students=set()))
+    dur_pool = np.array([60, 90, 120, 150, 180])
+    dur_w = np.array([3, 2, 3, 1, 2], dtype=float)
+    dur_w /= dur_w.sum()
+    exam_durs = nprng.choice(dur_pool, size=ne, p=dur_w)
+    exams = [Exam(id=eid, duration=int(exam_durs[eid]), students=set()) for eid in range(ne)]
 
-    # ── Department-clustered enrollment ──
+    # ── Department-clustered enrollment (vectorized) ──
     n_depts = max(3, int(ne * cfg['dept_count_ratio']))
+
+    # Assign exams to departments
     dept_exams = [[] for _ in range(n_depts)]
+    primary_depts = nprng.integers(0, n_depts, size=ne)
     for eid in range(ne):
-        d1 = rng.randint(0, n_depts - 1)
-        dept_exams[d1].append(eid)
-        if rng.random() < 0.2:
-            dept_exams[rng.randint(0, n_depts - 1)].append(eid)
+        dept_exams[primary_depts[eid]].append(eid)
+    # 20% chance of cross-listing
+    cross_mask = nprng.random(ne) < 0.2
+    cross_depts = nprng.integers(0, n_depts, size=ne)
+    for eid in np.where(cross_mask)[0]:
+        dept_exams[cross_depts[eid]].append(int(eid))
+
+    # Pre-convert to arrays for fast sampling
+    dept_exam_arrays = [np.array(d, dtype=np.int32) if d else np.arange(ne, dtype=np.int32)
+                        for d in dept_exams]
+
+    # Batch student enrollment — the main bottleneck for large instances
+    eps = cfg.get('exams_per_student', 4.0)
+    student_depts = nprng.integers(0, n_depts, size=num_students)
+    student_k = np.clip(nprng.normal(eps, 1.0, size=num_students).astype(int), 1, 8)
 
     for sid in range(num_students):
-        dept = rng.randint(0, n_depts - 1)
-        avail = dept_exams[dept] if dept_exams[dept] else list(range(ne))
-        eps = cfg.get('exams_per_student', 4.0)
-        k = max(1, min(int(rng.gauss(eps, 1.0)), len(avail), 8))
-        for eid in rng.sample(avail, k):
+        dept = student_depts[sid]
+        avail = dept_exam_arrays[dept]
+        k = min(int(student_k[sid]), len(avail))
+        chosen = nprng.choice(avail, size=k, replace=False)
+        for eid in chosen:
             exams[eid].students.add(sid)
 
-    # Boost top exams for power-law enrollment tail.
-    # Use existing students (resampled) to avoid creating universal conflicts.
-    all_sids = list(range(num_students))
-    exam_by_enr = sorted(range(ne), key=lambda e: len(exams[e].students), reverse=True)
+    # Boost top exams for power-law enrollment tail
+    exam_sizes = np.array([len(exams[e].students) for e in range(ne)])
+    exam_by_enr = np.argsort(-exam_sizes)
     n_boost = max(1, int(ne * 0.03))
-    current_max = len(exams[exam_by_enr[0]].students) if ne > 0 else 1
+    current_max = int(exam_sizes[exam_by_enr[0]]) if ne > 0 else 1
     target_max = min(max_cap, int(current_max * (2.0 + cfg['enrollment_skew'])))
+
     for i in range(n_boost):
-        eid = exam_by_enr[i]
+        eid = int(exam_by_enr[i])
         cur = len(exams[eid].students)
         extra = max(0, target_max - cur - i * (target_max // (n_boost + 1)))
-        # Add students NOT currently enrolled in conflicting exams (reduces degree blow-up)
-        candidates = [s for s in rng.sample(all_sids, min(extra * 3, num_students))
-                      if s not in exams[eid].students]
-        for s in candidates[:extra]:
+        if extra <= 0:
+            continue
+        # Sample candidates not already enrolled, using set difference
+        sample_size = min(extra * 3, num_students)
+        candidates = nprng.choice(num_students, size=sample_size, replace=False)
+        existing = exams[eid].students
+        new_students = [int(s) for s in candidates if s not in existing]
+        for s in new_students[:extra]:
             exams[eid].students.add(s)
 
     # ── Period hard constraints (scaled to instance size) ──
     phcs = []
     used = set()
 
-    # Scale constraint counts with instance size (target: ~0.05-0.15 per exam)
     scale = ne / 200.0
     n_coin = max(0, int(cfg['phc_coincidence'] * scale))
     n_excl = max(0, int(cfg['phc_exclusion'] * scale))
@@ -190,13 +210,13 @@ def generate_synthetic(
             if a == b: continue
             if (a,b) in used or (b,a) in used: continue
             if avoid_conflict and (exams[a].students & exams[b].students):
-                continue  # Can't require coincidence for conflicting exams
+                continue
             used.add((a,b))
             return a, b
         return None, None
 
     for _ in range(n_coin):
-        a, b = _pair(avoid_conflict=True)  # COINCIDENCE only for non-conflicting pairs
+        a, b = _pair(avoid_conflict=True)
         if a is not None: phcs.append(PeriodHardConstraint(a, "EXAM_COINCIDENCE", b))
     for _ in range(n_excl):
         a, b = _pair()
@@ -231,27 +251,34 @@ def generate_suite(sizes=None, preset="medium", seed=42):
 
 
 def write_itc2007_format(problem: ProblemInstance, filepath: str):
-    """Write a ProblemInstance to ITC 2007 .exam format."""
+    """Write a ProblemInstance to ITC 2007 .exam format (buffered)."""
+    lines = []
+    lines.append(f"[Exams:{len(problem.exams)}]")
+    for exam in problem.exams:
+        if exam.students:
+            lines.append(f"{exam.duration}, " + ", ".join(map(str, sorted(exam.students))))
+        else:
+            lines.append(str(exam.duration))
+    lines.append(f"[Periods:{len(problem.periods)}]")
+    for p in problem.periods:
+        lines.append(f"{p.date}, {p.time}, {p.duration}, {p.penalty}")
+    lines.append(f"[Rooms:{len(problem.rooms)}]")
+    for r in problem.rooms:
+        lines.append(f"{r.capacity}, {r.penalty}")
+    lines.append("[PeriodHardConstraints]")
+    for c in problem.period_hard_constraints:
+        lines.append(f"{c.exam1_id}, {c.constraint_type}, {c.exam2_id}")
+    lines.append("[RoomHardConstraints]")
+    for c in problem.room_hard_constraints:
+        lines.append(f"{c.exam_id}, {c.constraint_type}")
+    lines.append("[InstitutionalWeightings]")
+    w = problem.weightings
+    lines.append(f"TWOINAROW:{w.two_in_a_row}")
+    lines.append(f"TWOINADAY:{w.two_in_a_day}")
+    lines.append(f"PERIODSPREAD:{w.period_spread}")
+    lines.append(f"NONMIXEDDURATIONS:{w.non_mixed_durations}")
+    fl = w.front_load
+    lines.append(f"FRONTLOAD, {fl[0]}, {fl[1]}, {fl[2]}")
+
     with open(filepath, 'w') as f:
-        f.write(f"[Exams:{len(problem.exams)}]\n")
-        for exam in problem.exams:
-            ss = ", ".join(str(s) for s in sorted(exam.students))
-            f.write(f"{exam.duration}, {ss}\n" if ss else f"{exam.duration}\n")
-        f.write(f"[Periods:{len(problem.periods)}]\n")
-        for p in problem.periods:
-            f.write(f"{p.date}, {p.time}, {p.duration}, {p.penalty}\n")
-        f.write(f"[Rooms:{len(problem.rooms)}]\n")
-        for r in problem.rooms:
-            f.write(f"{r.capacity}, {r.penalty}\n")
-        f.write("[PeriodHardConstraints]\n")
-        for c in problem.period_hard_constraints:
-            f.write(f"{c.exam1_id}, {c.constraint_type}, {c.exam2_id}\n")
-        f.write("[RoomHardConstraints]\n")
-        for c in problem.room_hard_constraints:
-            f.write(f"{c.exam_id}, {c.constraint_type}\n")
-        f.write("[InstitutionalWeightings]\n")
-        w = problem.weightings
-        f.write(f"TWOINAROW:{w.two_in_a_row}\nTWOINADAY:{w.two_in_a_day}\n")
-        f.write(f"PERIODSPREAD:{w.period_spread}\nNONMIXEDDURATIONS:{w.non_mixed_durations}\n")
-        fl = w.front_load
-        f.write(f"FRONTLOAD, {fl[0]}, {fl[1]}, {fl[2]}\n")
+        f.write("\n".join(lines) + "\n")
