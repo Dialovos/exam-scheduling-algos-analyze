@@ -356,7 +356,7 @@ def run_cpp_solver(
 
         # Load solution from .sln file
         safe_name = name.lower().replace(' ', '_')
-        sln_path = os.path.join(output_dir, f"solution_{safe_name}_{ne}.sln")
+        sln_path = os.path.join(output_dir, "solutions", f"solution_{safe_name}_{ne}.sln")
         sol = _load_solution(problem, sln_path)
 
         algo_results[name] = {

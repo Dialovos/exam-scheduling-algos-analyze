@@ -13,32 +13,54 @@ We benchmark against the [ITC 2007 Examination Track](https://www.eeecs.qub.ac.u
 
 ## Quick Start
 
-The Jupyter notebook (`exam_scheduling.ipynb`) is the easiest way to run experiments interactively. Otherwise, use the CLI:
-
 ```bash
-# Build the C++ solver
-make                    # Linux
-# Windows: g++ -O3 -std=c++20 -o cpp/exam_solver.exe cpp/main.cpp
-
-# Install Python dependencies
+make                         # build the C++ solver
 pip install -r requirements.txt
-
-# Run all algorithms on a dataset
 python main.py --dataset datasets/exam_comp_set4.exam
-
-# Run a single algorithm
-python main.py --dataset datasets/exam_comp_set4.exam --algo sa
-python main.py --dataset datasets/exam_comp_set4.exam --algo ip --limit 100
-
-# Tune parameters
-python main.py --dataset datasets/exam_comp_set4.exam --tabu-iters 5000 --sa-iters 10000
-
-# Run the C++ solver directly
-./cpp/exam_solver datasets/exam_comp_set4.exam --algo all -v
-
-# Generate and solve a synthetic instance
-python main.py --mode demo --size 200
 ```
+
+This runs all 7 C++ algorithms on set 4 (273 exams — fast, good for smoke tests). Results go into an auto-created batch directory under `results/`.
+
+For interactive experiments, open `exam_scheduling.ipynb`.
+
+## Datasets
+
+| Set | Exams | Notes |
+|-----|------:|-------|
+| set4 | 273 | Small, fast — good for quick tests and parameter sweeps |
+| set6 | 242 | Smallest set, minimal constraints |
+| set8 | 598 | Medium, well-constrained |
+| set1 | 607 | Medium, classic benchmark |
+| set2 | 870 | Large, low constraint density |
+| set3 | 934 | Hardest — 170 period constraints, only HHO achieves feasibility |
+| set5 | 1018 | Large, tight room capacity |
+| set7 | 1096 | Largest set |
+
+All from the [ITC 2007 Examination Track](https://www.eeecs.qub.ac.uk/itc2007/examtrack/). The synthetic generator also outputs in ITC 2007 format.
+
+## Command Reference
+
+| Flag | Description |
+|------|-------------|
+| `--dataset FILE` | Run on an ITC 2007 `.exam` file |
+| `--algo NAME` | Single algorithm: `greedy`, `tabu`, `hho`, `kempe`, `sa`, `alns`, `gd`, `ip` |
+| `--mode MODE` | `demo` (default), `plot`, or `batches` |
+| `--size N` | Exam count for synthetic demo mode |
+| `--batch "name"` | Create a named batch for results |
+| `--load-batch ID` | Write into an existing batch (by ID, name, or partial match) |
+| `--no-batch` | Skip batching, write directly to `results/` |
+| `--seed N` | Random seed (default: 42) |
+| `--quiet` | Suppress progress output |
+| `--tabu-iters` | Tabu iterations (default: 2000) |
+| `--tabu-patience` | Tabu early-stop patience (default: 500) |
+| `--hho-pop` | HHO population size (default: 50) |
+| `--hho-iters` | HHO iterations (default: 500) |
+| `--sa-iters` | SA iterations (default: 5000) |
+| `--kempe-iters` | Kempe iterations (default: 3000) |
+| `--alns-iters` | ALNS iterations (default: 2000) |
+| `--gd-iters` | Great Deluge iterations (default: 5000) |
+
+The C++ solver can also be called directly: `./cpp/exam_solver <file.exam> [same flags] -v`
 
 ## Algorithms
 
@@ -96,17 +118,19 @@ exam_scheduling/
 │   └── generator.py             # Synthetic instance generator
 │
 ├── utils/
+│   ├── batch_manager.py         # Batch isolation (auto/manual/load previous)
 │   ├── results_logger.py        # Structured run logging (JSONL + CSV)
-│   ├── plotting.py              # 8 chart types for analysis
+│   ├── plotting.py              # 15 chart types for analysis
 │   └── benchmark.py             # Batch benchmarking utilities
 │
 ├── datasets/                    # ITC 2007 sets 1-8 + synthetic instances
-└── results/                     # Solutions, logs, and plots
+└── results/
+    └── batch_NNN_<name>/        # Each run in its own batch
+        ├── batch_meta.json
+        ├── run_log.jsonl
+        ├── *.png                # Plots
+        └── solutions/           # .sln files
 ```
-
-## Datasets
-
-We use the official ITC 2007 Examination Track datasets (sets 1 through 8), available from [QUB](https://www.eeecs.qub.ac.uk/itc2007/examtrack/). The synthetic generator also outputs in ITC 2007 format, so you can mix real and generated instances for testing.
 
 ## GenAI Usage Disclosure
 

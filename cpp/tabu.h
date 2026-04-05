@@ -59,6 +59,7 @@ inline AlgoResult solve_tabu(
     double current_fitness = ev.fitness();
     Solution best_sol = sol.copy();
     double best_fitness = current_fitness;
+    bool best_feasible = ev.feasible();
 
     if (verbose)
         std::cerr << "[Tabu] Init: feasible=" << ev.feasible()
@@ -205,13 +206,16 @@ inline AlgoResult solve_tabu(
             tabu[tabu_key(beid, op)] = it + tabu_tenure;
         }
 
-        // Track best — verify with full_eval
+        // Track best — verify with full_eval, feasibility-first
         if (current_fitness < best_fitness - 0.5) {
             auto check = fe.full_eval(sol);
             double af = check.fitness();
-            if (af < best_fitness) {
+            bool af_feasible = check.feasible();
+            bool dominated = (best_feasible && !af_feasible);
+            if (!dominated && af < best_fitness) {
                 best_sol = sol.copy();
                 best_fitness = af;
+                best_feasible = af_feasible;
                 current_fitness = af;
                 no_improve = 0;
                 if (verbose && (it < 10 || it % 200 == 0))

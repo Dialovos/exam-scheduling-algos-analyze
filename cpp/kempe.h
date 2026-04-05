@@ -43,6 +43,7 @@ inline AlgoResult solve_kempe(
     EvalResult ev = fe.full_eval(sol);
     double current_fitness = ev.fitness();
     double best_fitness = current_fitness;
+    bool best_feasible = ev.feasible();
     Solution best_sol = sol.copy();
 
     if (verbose)
@@ -101,13 +102,17 @@ inline AlgoResult solve_kempe(
             sol.assign(e, (ep == p1) ? p2 : p1, er);
         }
 
-        double new_fitness = fe.full_eval(sol).fitness();
+        auto new_ev = fe.full_eval(sol);
+        double new_fitness = new_ev.fitness();
 
         if (new_fitness < current_fitness) {
             current_fitness = new_fitness;
-            if (new_fitness < best_fitness) {
+            bool nf = new_ev.feasible();
+            bool dominated = (best_feasible && !nf);
+            if (!dominated && new_fitness < best_fitness) {
                 best_sol = sol.copy();
                 best_fitness = new_fitness;
+                best_feasible = nf;
                 no_improve = 0;
                 if (verbose && (it < 10 || it % 500 == 0)) {
                     auto ev2 = fe.full_eval(sol);

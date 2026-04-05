@@ -24,6 +24,7 @@
 #include "alns.h"
 #include "gd.h"
 
+#include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -143,40 +144,42 @@ int main(int argc, char* argv[]) {
     // ── Run algorithms ──
     vector<AlgoResult> results;
     string ne_str = to_string(prob.n_e());
+    string sln_dir = output_dir + "/solutions";
+    filesystem::create_directories(sln_dir);
 
     if (algo == "all" || algo == "greedy") {
         auto r = solve_greedy(prob, verbose);
-        write_solution_file(r.sol, output_dir + "/solution_greedy_" + ne_str + ".sln");
+        write_solution_file(r.sol, sln_dir + "/solution_greedy_" + ne_str + ".sln");
         results.push_back(move(r));
     }
     if (algo == "all" || algo == "tabu") {
         auto r = solve_tabu(prob, tabu_iters, tabu_tenure, tabu_patience, seed, verbose);
-        write_solution_file(r.sol, output_dir + "/solution_tabu_search_" + ne_str + ".sln");
+        write_solution_file(r.sol, sln_dir + "/solution_tabu_search_" + ne_str + ".sln");
         results.push_back(move(r));
     }
     if (algo == "all" || algo == "hho") {
         auto r = solve_hho(prob, hho_pop, hho_iters, seed, verbose);
-        write_solution_file(r.sol, output_dir + "/solution_hho_" + ne_str + ".sln");
+        write_solution_file(r.sol, sln_dir + "/solution_hho_" + ne_str + ".sln");
         results.push_back(move(r));
     }
     if (algo == "all" || algo == "kempe") {
         auto r = solve_kempe(prob, kempe_iters, seed, verbose);
-        write_solution_file(r.sol, output_dir + "/solution_kempe_chain_" + ne_str + ".sln");
+        write_solution_file(r.sol, sln_dir + "/solution_kempe_chain_" + ne_str + ".sln");
         results.push_back(move(r));
     }
     if (algo == "all" || algo == "sa") {
         auto r = solve_sa(prob, sa_iters, 0.0, 0.9995, seed, verbose);
-        write_solution_file(r.sol, output_dir + "/solution_simulated_annealing_" + ne_str + ".sln");
+        write_solution_file(r.sol, sln_dir + "/solution_simulated_annealing_" + ne_str + ".sln");
         results.push_back(move(r));
     }
     if (algo == "all" || algo == "alns") {
         auto r = solve_alns(prob, alns_iters, 0.15, seed, verbose);
-        write_solution_file(r.sol, output_dir + "/solution_alns_" + ne_str + ".sln");
+        write_solution_file(r.sol, sln_dir + "/solution_alns_" + ne_str + ".sln");
         results.push_back(move(r));
     }
     if (algo == "all" || algo == "gd") {
         auto r = solve_great_deluge(prob, gd_iters, 0.0, seed, verbose);
-        write_solution_file(r.sol, output_dir + "/solution_great_deluge_" + ne_str + ".sln");
+        write_solution_file(r.sol, sln_dir + "/solution_great_deluge_" + ne_str + ".sln");
         results.push_back(move(r));
     }
 

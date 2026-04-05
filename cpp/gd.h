@@ -47,20 +47,79 @@ inline AlgoResult solve_great_deluge(
     Solution sol = greedy_res.sol.copy();
 
     EvalResult ev = fe.full_eval(sol);
+
+    // Feasibility recovery if greedy started infeasible
+    if (!ev.feasible()) {
+        if (verbose)
+            std::cerr << "[GD] Greedy infeasible (hard=" << ev.hard()
+                      << "), running recovery..." << std::endl;
+        fe.recover_feasibility(sol, 500, seed);
+        ev = fe.full_eval(sol);
+        if (verbose)
+            std::cerr << "[GD] After recovery: feasible=" << ev.feasible()
+                      << " hard=" << ev.hard() << " soft=" << ev.soft() << std::endl;
+    }
+
     double current_fitness = ev.fitness();
     Solution best_sol = sol.copy();
     double best_fitness = current_fitness;
+    bool best_feasible = ev.feasible();
 
-    double level = current_fitness;
+    // Start level above current fitness for initial exploration, decay toward 30%
+    double level = current_fitness * 1.1;
+    double target_level = current_fitness * 0.3;
+    // If infeasible, allow more room for exploration
+    if (!ev.feasible()) {
+        level = current_fitness * 1.2;
+        target_level = current_fitness * 0.1;
+    }
     if (decay_rate <= 0.0)
-        decay_rate = current_fitness / std::max(max_iterations, 1);
+        decay_rate = (level - target_level) / std::max(max_iterations, 1);
 
     if (verbose)
         std::cerr << "[GD] Init: feasible=" << ev.feasible()
                   << " hard=" << ev.hard() << " soft=" << ev.soft()
-                  << " level=" << level << std::endl;
+                  << " level=" << level << " target=" << target_level << std::endl;
 
     std::uniform_int_distribution<int> de(0, ne - 1);
+    std::uniform_real_distribution<double> unif(0.0, 1.0);
+
+    // Per-exam cost for weighted selection
+    std::vector<double> exam_cost(ne, 1.0);
+    auto recompute_costs = [&]() {
+        double total = 0;
+        for (int e = 0; e < ne; e++) {
+            int pid = sol.period_of[e]; if (pid < 0) { exam_cost[e] = 1.0; continue; }
+            double c = 1.0;
+            for (auto& [nb, _] : prob.adj[e]) {
+                int np2 = sol.period_of[nb]; if (np2 < 0) continue;
+                if (np2 == pid) c += 100000;
+                int gap = std::abs(pid - np2);
+                if (gap > 0 && gap <= fe.w_spread) c += 1;
+                if (fe.period_day[pid] == fe.period_day[np2]) {
+                    int g = std::abs(fe.period_daypos[pid] - fe.period_daypos[np2]);
+                    if (g == 1) c += fe.w_2row;
+                    else if (g > 1) c += fe.w_2day;
+                }
+            }
+            exam_cost[e] = c;
+            total += c;
+        }
+        if (total > 0) for (int e = 0; e < ne; e++) exam_cost[e] /= total;
+    };
+
+    auto weighted_pick = [&]() -> int {
+        double r = unif(rng);
+        double acc = 0;
+        for (int e = 0; e < ne; e++) {
+            acc += exam_cost[e];
+            if (r <= acc) return e;
+        }
+        return ne - 1;
+    };
+
+    recompute_costs();
+
     int no_improve = 0;
     int iters_done = 0;
 
@@ -71,29 +130,46 @@ inline AlgoResult solve_great_deluge(
             ev = fe.full_eval(sol);
             current_fitness = ev.fitness();
         }
+        if (it % 500 == 0) recompute_costs();
 
-        int eid = de(rng);
+        // Steepest descent within level: scan all moves for selected exam
+        int eid = (unif(rng) < 0.7) ? weighted_pick() : de(rng);
         auto& vp = valid_p[eid];
         auto& vr = valid_r[eid];
         if (vp.empty() || vr.empty()) continue;
 
-        int new_pid = vp[rng() % vp.size()];
-        int new_rid = vr[rng() % vr.size()];
-        if (new_pid == sol.period_of[eid] && new_rid == sol.room_of[eid]) continue;
+        int best_pid = -1, best_rid = -1;
+        double best_delta = 1e18;
+        int cp = sol.period_of[eid];
 
-        double delta = fe.move_delta(sol, eid, new_pid, new_rid);
-        double new_fitness = current_fitness + delta;
+        for (int pid : vp) {
+            if (pid == cp) continue;
+            for (int rid : vr) {
+                double d = fe.move_delta(sol, eid, pid, rid);
+                if (d < best_delta) {
+                    best_delta = d;
+                    best_pid = pid;
+                    best_rid = rid;
+                }
+            }
+        }
+
+        if (best_pid < 0) continue;
+        double new_fitness = current_fitness + best_delta;
 
         if (new_fitness <= level) {
-            fe.apply_move(sol, eid, new_pid, new_rid);
+            fe.apply_move(sol, eid, best_pid, best_rid);
             current_fitness = new_fitness;
 
             if (current_fitness < best_fitness - 0.5) {
                 auto check = fe.full_eval(sol);
                 double af = check.fitness();
-                if (af < best_fitness) {
+                bool af_feasible = check.feasible();
+                bool dominated = (best_feasible && !af_feasible);
+                if (!dominated && af < best_fitness) {
                     best_sol = sol.copy();
                     best_fitness = af;
+                    best_feasible = af_feasible;
                     no_improve = 0;
                     if (verbose && (it < 10 || it % 1000 == 0))
                         std::cerr << "[GD] Iter " << it << ": best hard=" << check.hard()
@@ -109,9 +185,9 @@ inline AlgoResult solve_great_deluge(
 
         level -= decay_rate;
 
-        // Raise level if stuck
-        if (no_improve > 0 && no_improve % 1000 == 0)
-            level = current_fitness * 1.02;
+        // Raise level if stuck — 5% above current, every 500 iters
+        if (no_improve > 0 && no_improve % 500 == 0)
+            level = current_fitness * 1.05;
     }
 
     auto t1 = std::chrono::high_resolution_clock::now();
