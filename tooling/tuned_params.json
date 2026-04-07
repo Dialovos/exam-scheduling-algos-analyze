@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "timestamp": "2026-04-06T01:34:41.142785",
+  "params": {
+    "tabu": {
+      "tabu_iters": 2000,
+      "tabu_tenure": 20,
+      "tabu_patience": 500
+    },
+    "hho": {
+      "hho_pop": 74,
+      "hho_iters": 304
+    },
+    "sa": {
+      "sa_iters": 5000
+    },
+    "kempe": {
+      "kempe_iters": 15832
+    },
+    "alns": {
+      "alns_iters": 2000
+    },
+    "gd": {
+      "gd_iters": 5000
+    },
+    "abc": {
+      "abc_pop": 30,
+      "abc_iters": 3000
+    },
+    "ga": {
+      "ga_pop": 50,
+      "ga_iters": 500
+    },
+    "lahc": {
+      "lahc_iters": 5000,
+      "lahc_list": 0
+    }
+  },
+  "aggregate_score": 3.2968434202136634,
+  "per_dataset_scores": {
+    "exam_comp_set1": 11150.0,
+    "exam_comp_set2": 3377.0,
+    "exam_comp_set3": 31109.0,
+    "exam_comp_set4": 26002.0,
+    "exam_comp_set5": 5177.0,
+    "exam_comp_set6": 33305.0,
+    "exam_comp_set7": 9849.0,
+    "exam_comp_set8": 13717.0,
+    "synthetic_tuner": 259.0
+  },
+  "trial_count": 129,
+  "source": "auto_tuner"
+}
