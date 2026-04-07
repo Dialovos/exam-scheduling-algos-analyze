@@ -13,10 +13,11 @@
 
 #include <algorithm>
 #include <cstdlib>
-#include <map>
 #include <numeric>
 #include <random>
 #include <set>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 class FastEvaluator {
@@ -33,10 +34,10 @@ public:
     int w_2row, w_2day, w_spread, w_mixed;
     int fl_n_largest, fl_n_last, fl_penalty;
 
-    // Precomputed sets
-    std::set<int> large_exams;
-    std::set<int> last_periods;
-    std::set<int> rhc_exams;
+    // Precomputed sets (unordered for O(1) lookup in hot paths)
+    std::unordered_set<int> large_exams;
+    std::unordered_set<int> last_periods;
+    std::unordered_set<int> rhc_exams;
 
     // Period hard constraints indexed by exam for O(k) delta lookup
     // phc_by_exam[eid] = {(other_eid, type_code)}
@@ -100,16 +101,20 @@ public:
             if (rc.type == "ROOM_EXCLUSIVE")
                 rhc_exams.insert(rc.exam_id);
 
-        // Period hard constraints indexed by exam
+        // Period hard constraints indexed by exam — bidirectional for
+        // symmetric constraints so move_delta sees them from both sides.
         phc_by_exam.resize(ne);
         for (auto& c : p.phcs) {
             if (c.exam1 >= ne || c.exam2 >= ne) continue;
-            if (c.type == "EXAM_COINCIDENCE")
+            if (c.type == "EXAM_COINCIDENCE") {
                 phc_by_exam[c.exam1].push_back({c.exam2, 0});
-            else if (c.type == "EXCLUSION")
+                phc_by_exam[c.exam2].push_back({c.exam1, 0});  // symmetric
+            } else if (c.type == "EXCLUSION") {
                 phc_by_exam[c.exam1].push_back({c.exam2, 1});
-            else if (c.type == "AFTER")
-                phc_by_exam[c.exam1].push_back({c.exam2, 2});
+                phc_by_exam[c.exam2].push_back({c.exam1, 1});  // symmetric
+            } else if (c.type == "AFTER") {
+                phc_by_exam[c.exam1].push_back({c.exam2, 2});  // asymmetric by design
+            }
         }
     }
 
@@ -121,8 +126,8 @@ public:
         const auto& ro = sol.room_of;
 
         // Build per-(period,room) data
-        std::map<int64_t, std::vector<int>> pr_exams;
-        std::map<int64_t, int> pr_enr;
+        std::unordered_map<int64_t, std::vector<int>> pr_exams;
+        std::unordered_map<int64_t, int> pr_enr;
         for (int e = 0; e < ne; e++) {
             if (po[e] < 0) continue;
             int64_t key = (int64_t)po[e] * nr + ro[e];
@@ -514,5 +519,35 @@ public:
         // Restore best found
         sol = best_sol.copy();
         return full_eval(sol).feasible();
+    }
+
+    // ── Room post-processing ────────────────────────────────
+    // Per-period greedy room reassignment: moves each exam to its
+    // best room (steepest descent) until no improvement. Targets
+    // room_penalty, mixed_duration, room_occupancy.
+
+    void optimize_rooms(Solution& sol) const {
+        if (nr <= 1) return;
+        for (int p = 0; p < np; p++) {
+            for (int pass = 0; pass < 5; pass++) {
+                bool changed = false;
+                for (int e = 0; e < ne; e++) {
+                    if (sol.period_of[e] != p) continue;
+                    int cur_r = sol.room_of[e];
+                    double best_d = -0.5;
+                    int best_r = -1;
+                    for (int r = 0; r < nr; r++) {
+                        if (r == cur_r) continue;
+                        double d = move_delta(sol, e, p, r);
+                        if (d < best_d) { best_d = d; best_r = r; }
+                    }
+                    if (best_r >= 0) {
+                        apply_move(sol, e, p, best_r);
+                        changed = true;
+                    }
+                }
+                if (!changed) break;
+            }
+        }
     }
 };

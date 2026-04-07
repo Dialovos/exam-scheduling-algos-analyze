@@ -11,9 +11,9 @@ import time
 import os
 import tracemalloc
 from typing import Callable
-from data.models import ProblemInstance
-from data.generator import generate_synthetic
-from data.evaluator import evaluate
+from core.models import ProblemInstance
+from core.generator import generate_synthetic
+from core.evaluator import evaluate
 from algorithms.greedy import solve_greedy
 from algorithms.tabu_search import solve_tabu
 from algorithms.hho import solve_hho

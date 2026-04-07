@@ -9,8 +9,8 @@ Re-syncs with full_eval every 50 iterations.
 import time
 import math
 import random as _random
-from data.models import ProblemInstance, Solution
-from data.fast_eval import FastEvaluator
+from core.models import ProblemInstance, Solution
+from core.fast_eval import FastEvaluator
 from algorithms.greedy import solve_greedy
 
 

@@ -5,6 +5,13 @@
  * Uses move_delta for O(k) neighbor evaluation.
  * Re-syncs with full_eval every 50 iterations.
  * Reheats when stuck.
+ *
+ * FastSA pruning: tracks accepted moves per exam per temperature bin.
+ * Exams with zero accepted moves in the previous bin are skipped (90%),
+ * saving move_delta evaluations on "frozen" exams at low T.
+ *
+ * Mixed neighborhood: 70% period+room moves, 30% room-only moves
+ * for separate room optimization.
  */
 
 #pragma once
@@ -26,7 +33,8 @@ inline AlgoResult solve_sa(
     double init_temp   = 0.0,
     double cooling     = 0.9995,
     int seed           = 42,
-    bool verbose       = false)
+    bool verbose       = false,
+    const Solution* init_sol = nullptr)
 {
     auto t0 = std::chrono::high_resolution_clock::now();
     std::mt19937 rng(seed);
@@ -46,8 +54,9 @@ inline AlgoResult solve_sa(
     }
 
     // Init from greedy
-    auto greedy_res = solve_greedy(prob, false);
-    Solution sol = greedy_res.sol.copy();
+    Solution sol;
+    if (init_sol) { sol = init_sol->copy(); }
+    else { auto g = solve_greedy(prob, false); sol = g.sol.copy(); }
 
     EvalResult ev = fe.full_eval(sol);
 
@@ -131,11 +140,25 @@ inline AlgoResult solve_sa(
 
     recompute_costs();
 
+    // FastSA: temperature-bin activity tracking
+    int bin_size = std::max(ne, 100);
+    std::vector<int> active_cur(ne, 0);
+    std::vector<int> active_prev(ne, 1);  // all active initially
+    int bin_iter = 0;
+
     int no_improve = 0;
     int iters_done = 0;
 
     for (int it = 0; it < max_iterations; it++) {
         iters_done = it + 1;
+
+        // FastSA: advance temperature bin
+        bin_iter++;
+        if (bin_iter >= bin_size) {
+            active_prev.swap(active_cur);
+            std::fill(active_cur.begin(), active_cur.end(), 0);
+            bin_iter = 0;
+        }
 
         if (it % 50 == 0) {
             ev = fe.full_eval(sol);
@@ -149,9 +172,15 @@ inline AlgoResult solve_sa(
         auto& vr = valid_r[eid];
         if (vp.empty() || vr.empty()) continue;
 
+        // FastSA: skip exams inactive in previous bin (90% skip rate)
+        bool is_feasible = (current_fitness < 100000);
+        if (is_feasible && active_prev[eid] == 0 && unif(rng) < 0.9)
+            continue;
+
         double delta;
         int move_pid, move_rid;
-        bool is_feasible = (current_fitness < 100000);
+        bool is_swap = false;
+        int swap_e2 = -1, swap_e2_pid = -1, swap_e2_rid = -1;
 
         if (!is_feasible) {
             // Steepest descent scan — quickly reduce hard violations
@@ -168,11 +197,37 @@ inline AlgoResult solve_sa(
             if (best_pid < 0) continue;
             delta = best_d; move_pid = best_pid; move_rid = best_rid;
         } else {
-            // Random move — SA needs diversity for soft optimization
-            move_pid = vp[rng() % vp.size()];
-            move_rid = vr[rng() % vr.size()];
-            if (move_pid == sol.period_of[eid] && move_rid == sol.room_of[eid]) continue;
-            delta = fe.move_delta(sol, eid, move_pid, move_rid);
+            double r_move = unif(rng);
+            if (r_move < 0.25 && ne > 1) {
+                // Swap move: exchange periods of two exams (keep rooms)
+                int e2 = (unif(rng) < 0.7) ? weighted_pick() : de(rng);
+                if (e2 == eid) continue;
+                int cp1 = sol.period_of[eid], cr1 = sol.room_of[eid];
+                int cp2 = sol.period_of[e2], cr2 = sol.room_of[e2];
+                if (cp1 < 0 || cp2 < 0 || cp1 == cp2) continue;
+                if (exam_dur[eid] > period_dur[cp2] || exam_dur[e2] > period_dur[cp1]) continue;
+                // Compute via temp-apply/undo
+                double d1 = fe.move_delta(sol, eid, cp2, cr1);
+                fe.apply_move(sol, eid, cp2, cr1);
+                double d2 = fe.move_delta(sol, e2, cp1, cr2);
+                fe.apply_move(sol, eid, cp1, cr1); // undo
+                delta = d1 + d2;
+                move_pid = cp2; move_rid = cr1;
+                is_swap = true;
+                swap_e2 = e2; swap_e2_pid = cp1; swap_e2_rid = cr2;
+            } else if (r_move < 0.40 && nr > 1) {
+                // Room-only move
+                move_pid = sol.period_of[eid];
+                move_rid = vr[rng() % vr.size()];
+                if (move_rid == sol.room_of[eid]) continue;
+                delta = fe.move_delta(sol, eid, move_pid, move_rid);
+            } else {
+                // Single period+room move
+                move_pid = vp[rng() % vp.size()];
+                move_rid = vr[rng() % vr.size()];
+                if (move_pid == sol.period_of[eid] && move_rid == sol.room_of[eid]) continue;
+                delta = fe.move_delta(sol, eid, move_pid, move_rid);
+            }
         }
 
         bool accept = (delta < 0);
@@ -181,13 +236,17 @@ inline AlgoResult solve_sa(
 
         if (accept) {
             fe.apply_move(sol, eid, move_pid, move_rid);
+            if (is_swap) {
+                fe.apply_move(sol, swap_e2, swap_e2_pid, swap_e2_rid);
+                active_cur[swap_e2]++;
+            }
             current_fitness += delta;
+            active_cur[eid]++;
 
             if (current_fitness < best_fitness - 0.5) {
                 auto check = fe.full_eval(sol);
                 double af = check.fitness();
                 bool af_feasible = check.feasible();
-                // Feasibility-first: never replace feasible best with infeasible
                 bool dominated = (best_feasible && !af_feasible);
                 if (!dominated && af < best_fitness) {
                     best_sol = sol.copy();
@@ -212,6 +271,8 @@ inline AlgoResult solve_sa(
         if (no_improve > 0 && no_improve % 1000 == 0)
             temp = std::max(temp, init_temp * 0.3);
     }
+
+    fe.optimize_rooms(best_sol);
 
     auto t1 = std::chrono::high_resolution_clock::now();
     double rt = std::chrono::duration<double>(t1 - t0).count();

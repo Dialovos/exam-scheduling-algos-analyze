@@ -6,15 +6,15 @@ Combines parameter optimization + algorithm chaining with tournament-based
 natural selection. Evaluates across multiple datasets to avoid overfitting.
 
 Single-dataset mode:
-    python auto_tuner.py datasets/exam_comp_set4.exam
+    python -m tooling.auto_tuner instances/exam_comp_set4.exam
 
 Multi-dataset (global) mode:
-    python auto_tuner.py --all-sets
-    python auto_tuner.py --all-sets --synthetic
-    python auto_tuner.py datasets/exam_comp_set1.exam datasets/exam_comp_set4.exam datasets/exam_comp_set7.exam
+    python -m tooling.auto_tuner --all-sets
+    python -m tooling.auto_tuner --all-sets --synthetic
+    python -m tooling.auto_tuner instances/exam_comp_set1.exam instances/exam_comp_set4.exam instances/exam_comp_set7.exam
 
 Resume from checkpoint:
-    python auto_tuner.py --all-sets --resume
+    python -m tooling.auto_tuner --all-sets --resume
 """
 
 import argparse
@@ -63,7 +63,7 @@ SEARCH_SPACES = {
     },
 }
 
-from tuned_params import load_params as _load_golden, FALLBACK_PARAMS
+from tooling.tuned_params import load_params as _load_golden, FALLBACK_PARAMS
 
 DEFAULT_PARAMS = _load_golden()
 
@@ -364,7 +364,7 @@ def generate_synthetic_dataset(output_dir, num_exams=500, preset='competition',
                                seed=42):
     """Generate a synthetic dataset and return its path."""
     sys.path.insert(0, str(Path(__file__).parent))
-    from data.generator import generate_synthetic, write_itc2007_format
+    from core.generator import generate_synthetic, write_itc2007_format
 
     os.makedirs(output_dir, exist_ok=True)
     path = os.path.join(output_dir, f'synthetic_{preset}_{num_exams}.exam')
@@ -1124,7 +1124,7 @@ class AutoTuner:
 
     def _maybe_update_params(self, report):
         """Check if tuned params should replace the golden defaults."""
-        from tuned_params import (save_params, check_should_update,
+        from tooling.tuned_params import (save_params, check_should_update,
                                   check_plateau, load_metadata)
 
         if not self.auto_update:
@@ -1261,17 +1261,17 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python auto_tuner.py datasets/exam_comp_set4.exam                     # single dataset
-  python auto_tuner.py --all-sets                                       # all ITC 2007 sets
-  python auto_tuner.py --all-sets --synthetic                           # all + synthetic
-  python auto_tuner.py datasets/exam_comp_set1.exam datasets/exam_comp_set4.exam  # specific sets
-  python auto_tuner.py --all-sets --resume                              # resume from checkpoint
-  python auto_tuner.py --all-sets --max-time 20                         # 20 min budget
+  python -m tooling.auto_tuner instances/exam_comp_set4.exam            # single dataset
+  python -m tooling.auto_tuner --all-sets                               # all ITC 2007 sets
+  python -m tooling.auto_tuner --all-sets --synthetic                   # all + synthetic
+  python -m tooling.auto_tuner instances/exam_comp_set1.exam instances/exam_comp_set4.exam  # specific sets
+  python -m tooling.auto_tuner --all-sets --resume                      # resume from checkpoint
+  python -m tooling.auto_tuner --all-sets --max-time 20                 # 20 min budget
         """)
 
     ap.add_argument('datasets', nargs='*', help='Dataset .exam files')
     ap.add_argument('--all-sets', action='store_true',
-                    help='Use all ITC 2007 datasets (datasets/exam_comp_set*.exam)')
+                    help='Use all ITC 2007 datasets (instances/exam_comp_set*.exam)')
     ap.add_argument('--synthetic', action='store_true',
                     help='Include a generated synthetic dataset')
     ap.add_argument('--output', default='tuning_results',
@@ -1302,7 +1302,8 @@ Examples:
     # Resolve datasets
     datasets = list(args.datasets)
     if args.all_sets:
-        root = Path(__file__).parent / 'datasets'
+        # auto_tuner.py lives in tooling/, so instances/ is one level up
+        root = Path(__file__).resolve().parent.parent / 'instances'
         itc_sets = sorted(root.glob('exam_comp_set*.exam'))
         datasets.extend(str(p) for p in itc_sets)
 

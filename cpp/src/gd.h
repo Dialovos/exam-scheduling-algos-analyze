@@ -23,7 +23,8 @@ inline AlgoResult solve_great_deluge(
     int max_iterations = 5000,
     double decay_rate  = 0.0,
     int seed           = 42,
-    bool verbose       = false)
+    bool verbose       = false,
+    const Solution* init_sol = nullptr)
 {
     auto t0 = std::chrono::high_resolution_clock::now();
     std::mt19937 rng(seed);
@@ -43,8 +44,9 @@ inline AlgoResult solve_great_deluge(
     }
 
     // Init from greedy
-    auto greedy_res = solve_greedy(prob, false);
-    Solution sol = greedy_res.sol.copy();
+    Solution sol;
+    if (init_sol) { sol = init_sol->copy(); }
+    else { auto g = solve_greedy(prob, false); sol = g.sol.copy(); }
 
     EvalResult ev = fe.full_eval(sol);
 
@@ -132,24 +134,44 @@ inline AlgoResult solve_great_deluge(
         }
         if (it % 500 == 0) recompute_costs();
 
-        // Steepest descent within level: scan all moves for selected exam
         int eid = (unif(rng) < 0.7) ? weighted_pick() : de(rng);
         auto& vp = valid_p[eid];
         auto& vr = valid_r[eid];
         if (vp.empty() || vr.empty()) continue;
 
-        int best_pid = -1, best_rid = -1;
         double best_delta = 1e18;
-        int cp = sol.period_of[eid];
+        int best_pid = -1, best_rid = -1;
+        bool is_swap = false;
+        int swap_e2 = -1, swap_e2_pid = -1, swap_e2_rid = -1;
 
-        for (int pid : vp) {
-            if (pid == cp) continue;
-            for (int rid : vr) {
-                double d = fe.move_delta(sol, eid, pid, rid);
-                if (d < best_delta) {
-                    best_delta = d;
-                    best_pid = pid;
-                    best_rid = rid;
+        if (unif(rng) < 0.25 && ne > 1 && current_fitness < 100000) {
+            // Swap move: exchange periods of two exams (keep rooms)
+            int e2 = (unif(rng) < 0.7) ? weighted_pick() : de(rng);
+            if (e2 != eid) {
+                int cp1 = sol.period_of[eid], cr1 = sol.room_of[eid];
+                int cp2 = sol.period_of[e2], cr2 = sol.room_of[e2];
+                if (cp1 >= 0 && cp2 >= 0 && cp1 != cp2 &&
+                    exam_dur[eid] <= period_dur[cp2] && exam_dur[e2] <= period_dur[cp1]) {
+                    double d1 = fe.move_delta(sol, eid, cp2, cr1);
+                    fe.apply_move(sol, eid, cp2, cr1);
+                    double d2 = fe.move_delta(sol, e2, cp1, cr2);
+                    fe.apply_move(sol, eid, cp1, cr1); // undo
+                    best_delta = d1 + d2;
+                    best_pid = cp2; best_rid = cr1;
+                    is_swap = true;
+                    swap_e2 = e2; swap_e2_pid = cp1; swap_e2_rid = cr2;
+                }
+            }
+        } else {
+            // Steepest descent: scan all moves for selected exam
+            int cp = sol.period_of[eid];
+            for (int pid : vp) {
+                if (pid == cp) continue;
+                for (int rid : vr) {
+                    double d = fe.move_delta(sol, eid, pid, rid);
+                    if (d < best_delta) {
+                        best_delta = d; best_pid = pid; best_rid = rid;
+                    }
                 }
             }
         }
@@ -159,6 +181,8 @@ inline AlgoResult solve_great_deluge(
 
         if (new_fitness <= level) {
             fe.apply_move(sol, eid, best_pid, best_rid);
+            if (is_swap)
+                fe.apply_move(sol, swap_e2, swap_e2_pid, swap_e2_rid);
             current_fitness = new_fitness;
 
             if (current_fitness < best_fitness - 0.5) {
@@ -189,6 +213,8 @@ inline AlgoResult solve_great_deluge(
         if (no_improve > 0 && no_improve % 500 == 0)
             level = current_fitness * 1.05;
     }
+
+    fe.optimize_rooms(best_sol);
 
     auto t1 = std::chrono::high_resolution_clock::now();
     double rt = std::chrono::duration<double>(t1 - t0).count();

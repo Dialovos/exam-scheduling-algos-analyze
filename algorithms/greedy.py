@@ -10,8 +10,8 @@ Root causes of infeasibility in the original greedy:
 import time
 import random as _random
 from collections import defaultdict
-from data.models import ProblemInstance, Solution
-from data.fast_eval import FastEvaluator
+from core.models import ProblemInstance, Solution
+from core.fast_eval import FastEvaluator
 
 
 def solve_greedy(problem: ProblemInstance, verbose: bool = False, seed: int = 42, **kw) -> dict:

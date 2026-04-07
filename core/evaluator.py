@@ -7,7 +7,7 @@ soft constraint penalty per the ITC 2007 specification.
 
 from __future__ import annotations
 from dataclasses import dataclass, field
-from data.models import ProblemInstance, Solution
+from core.models import ProblemInstance, Solution
 
 
 @dataclass
@@ -76,7 +76,7 @@ def evaluate(problem: ProblemInstance, solution: Solution) -> EvaluationResult:
     
     Now delegates to FastEvaluator for consistent results.
     """
-    from data.fast_eval import FastEvaluator
+    from core.fast_eval import FastEvaluator
     
     fe = FastEvaluator(problem)
     eb = fe.full_eval(solution)

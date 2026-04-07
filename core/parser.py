@@ -10,7 +10,7 @@ File sections:
   [InstitutionalWeightings] - key:value pairs
 """
 
-from data.models import (
+from core.models import (
     ProblemInstance, Exam, Period, Room,
     PeriodHardConstraint, RoomHardConstraint,
     InstitutionalWeightings,

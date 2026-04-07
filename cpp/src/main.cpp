@@ -23,6 +23,10 @@
 #include "sa.h"
 #include "alns.h"
 #include "gd.h"
+#include "abc.h"
+#include "ga.h"
+#include "lahc.h"
+#include "natural_selection.h"
 
 #include <filesystem>
 #include <fstream>
@@ -84,8 +88,16 @@ int main(int argc, char* argv[]) {
     int kempe_iters     = 3000;
     int alns_iters      = 2000;
     int gd_iters        = 5000;
+    int abc_pop         = 30;
+    int abc_iters       = 3000;
+    int ga_pop          = 50;
+    int ga_iters        = 500;
+    int lahc_iters      = 5000;
+    int lahc_list       = 0;
+    int ns_finalists    = 3;
     int seed            = 42;
     string output_dir   = "results";
+    string init_solution_path;
     bool verbose        = false;
 
     for (int i = 1; i < argc; i++) {
@@ -101,8 +113,16 @@ int main(int argc, char* argv[]) {
         else if (arg == "--kempe-iters"    && i+1 < argc) kempe_iters   = stoi(argv[++i]);
         else if (arg == "--alns-iters"     && i+1 < argc) alns_iters    = stoi(argv[++i]);
         else if (arg == "--gd-iters"       && i+1 < argc) gd_iters      = stoi(argv[++i]);
+        else if (arg == "--abc-pop"        && i+1 < argc) abc_pop       = stoi(argv[++i]);
+        else if (arg == "--abc-iters"      && i+1 < argc) abc_iters     = stoi(argv[++i]);
+        else if (arg == "--ga-pop"         && i+1 < argc) ga_pop        = stoi(argv[++i]);
+        else if (arg == "--ga-iters"       && i+1 < argc) ga_iters      = stoi(argv[++i]);
+        else if (arg == "--lahc-iters"     && i+1 < argc) lahc_iters    = stoi(argv[++i]);
+        else if (arg == "--lahc-list"      && i+1 < argc) lahc_list     = stoi(argv[++i]);
+        else if (arg == "--ns-finalists"   && i+1 < argc) ns_finalists  = stoi(argv[++i]);
         else if (arg == "--seed"           && i+1 < argc) seed          = stoi(argv[++i]);
         else if (arg == "--output-dir"     && i+1 < argc) output_dir    = argv[++i];
+        else if (arg == "--init-solution"  && i+1 < argc) init_solution_path = argv[++i];
         else if (arg == "--verbose" || arg == "-v")        verbose       = true;
         else if (arg[0] != '-')                            filepath      = arg;
     }
@@ -110,7 +130,7 @@ int main(int argc, char* argv[]) {
     if (filepath.empty()) {
         cerr << "Usage: exam_solver <file.exam> [options]\n"
              << "\nOptions:\n"
-             << "  --algo greedy|tabu|hho|kempe|sa|alns|gd|all  Algorithm (default: all)\n"
+             << "  --algo greedy|tabu|hho|kempe|sa|alns|gd|abc|ga|lahc|ns|all  Algorithm (default: all)\n"
              << "  --limit N                    Load only first N exams (0=all)\n"
              << "  --tabu-iters N               Tabu max iterations (default: 200)\n"
              << "  --tabu-tenure N              Tabu tenure (default: 15)\n"
@@ -121,8 +141,16 @@ int main(int argc, char* argv[]) {
              << "  --kempe-iters N              Kempe Chain iterations (default: 3000)\n"
              << "  --alns-iters N               ALNS iterations (default: 2000)\n"
              << "  --gd-iters N                 Great Deluge iterations (default: 5000)\n"
+             << "  --abc-pop N                  ABC colony size (default: 30)\n"
+             << "  --abc-iters N                ABC iterations (default: 3000)\n"
+             << "  --ga-pop N                   GA population size (default: 50)\n"
+             << "  --ga-iters N                 GA generations (default: 500)\n"
+             << "  --lahc-iters N               LAHC iterations (default: 5000)\n"
+             << "  --lahc-list N                LAHC list length (0=auto) (default: 0)\n"
+             << "  --ns-finalists N             Natural Selection finalists (default: 3)\n"
              << "  --seed N                     Random seed (default: 42)\n"
              << "  --output-dir DIR             Output directory (default: results)\n"
+             << "  --init-solution PATH         Warm-start from .sln file\n"
              << "  -v, --verbose                Print progress to stderr\n";
         return 1;
     }
@@ -141,45 +169,100 @@ int main(int argc, char* argv[]) {
              << prob.w.fl_n_last << "," << prob.w.fl_penalty << ")\n";
     }
 
+    // ── Load initial solution (warm-start) ──
+    Solution init_sol;
+    Solution* init_sol_ptr = nullptr;
+    if (!init_solution_path.empty()) {
+        init_sol.init(prob);
+        ifstream f(init_solution_path);
+        string line; int eid = 0;
+        while (getline(f, line) && eid < prob.n_e()) {
+            auto comma = line.find(',');
+            if (comma != string::npos) {
+                int pid = stoi(line.substr(0, comma));
+                int rid = stoi(line.substr(comma + 1));
+                if (pid >= 0 && rid >= 0) init_sol.assign(eid, pid, rid);
+            }
+            eid++;
+        }
+        init_sol_ptr = &init_sol;
+        if (verbose) cerr << "Loaded init solution from " << init_solution_path << endl;
+    }
+
     // ── Run algorithms ──
     vector<AlgoResult> results;
     string ne_str = to_string(prob.n_e());
     string sln_dir = output_dir + "/solutions";
     filesystem::create_directories(sln_dir);
 
-    if (algo == "all" || algo == "greedy") {
-        auto r = solve_greedy(prob, verbose);
-        write_solution_file(r.sol, sln_dir + "/solution_greedy_" + ne_str + ".sln");
-        results.push_back(move(r));
+    // When running all algos, compute greedy once and share as init solution
+    // instead of each algorithm rebuilding it independently.
+    const Solution* shared_init = init_sol_ptr;
+    AlgoResult greedy_result;
+    if (algo == "all") {
+        greedy_result = solve_greedy(prob, verbose);
+        write_solution_file(greedy_result.sol, sln_dir + "/solution_greedy_" + ne_str + ".sln");
+        results.push_back(greedy_result);
+        if (!init_sol_ptr)
+            shared_init = &greedy_result.sol;
+    } else if (algo == "greedy") {
+        greedy_result = solve_greedy(prob, verbose);
+        write_solution_file(greedy_result.sol, sln_dir + "/solution_greedy_" + ne_str + ".sln");
+        results.push_back(move(greedy_result));
     }
     if (algo == "all" || algo == "tabu") {
-        auto r = solve_tabu(prob, tabu_iters, tabu_tenure, tabu_patience, seed, verbose);
+        auto r = solve_tabu(prob, tabu_iters, tabu_tenure, tabu_patience, seed, verbose, shared_init);
         write_solution_file(r.sol, sln_dir + "/solution_tabu_search_" + ne_str + ".sln");
         results.push_back(move(r));
     }
     if (algo == "all" || algo == "hho") {
-        auto r = solve_hho(prob, hho_pop, hho_iters, seed, verbose);
+        auto r = solve_hho(prob, hho_pop, hho_iters, seed, verbose, shared_init);
         write_solution_file(r.sol, sln_dir + "/solution_hho_" + ne_str + ".sln");
         results.push_back(move(r));
     }
     if (algo == "all" || algo == "kempe") {
-        auto r = solve_kempe(prob, kempe_iters, seed, verbose);
+        auto r = solve_kempe(prob, kempe_iters, seed, verbose, shared_init);
         write_solution_file(r.sol, sln_dir + "/solution_kempe_chain_" + ne_str + ".sln");
         results.push_back(move(r));
     }
     if (algo == "all" || algo == "sa") {
-        auto r = solve_sa(prob, sa_iters, 0.0, 0.9995, seed, verbose);
+        auto r = solve_sa(prob, sa_iters, 0.0, 0.9995, seed, verbose, shared_init);
         write_solution_file(r.sol, sln_dir + "/solution_simulated_annealing_" + ne_str + ".sln");
         results.push_back(move(r));
     }
     if (algo == "all" || algo == "alns") {
-        auto r = solve_alns(prob, alns_iters, 0.15, seed, verbose);
+        auto r = solve_alns(prob, alns_iters, 0.15, seed, verbose, shared_init);
         write_solution_file(r.sol, sln_dir + "/solution_alns_" + ne_str + ".sln");
         results.push_back(move(r));
     }
     if (algo == "all" || algo == "gd") {
-        auto r = solve_great_deluge(prob, gd_iters, 0.0, seed, verbose);
+        auto r = solve_great_deluge(prob, gd_iters, 0.0, seed, verbose, shared_init);
         write_solution_file(r.sol, sln_dir + "/solution_great_deluge_" + ne_str + ".sln");
+        results.push_back(move(r));
+    }
+    if (algo == "all" || algo == "abc") {
+        auto r = solve_abc(prob, abc_pop, abc_iters, 0, seed, verbose, shared_init);
+        write_solution_file(r.sol, sln_dir + "/solution_abc_" + ne_str + ".sln");
+        results.push_back(move(r));
+    }
+    if (algo == "all" || algo == "ga") {
+        auto r = solve_ga(prob, ga_pop, ga_iters, 0.8, 0.15, seed, verbose, shared_init);
+        write_solution_file(r.sol, sln_dir + "/solution_genetic_algorithm_" + ne_str + ".sln");
+        results.push_back(move(r));
+    }
+    if (algo == "all" || algo == "lahc") {
+        auto r = solve_lahc(prob, lahc_iters, lahc_list, seed, verbose, shared_init);
+        write_solution_file(r.sol, sln_dir + "/solution_lahc_" + ne_str + ".sln");
+        results.push_back(move(r));
+    }
+    if (algo == "ns") {
+        auto r = solve_natural_selection(prob, ns_finalists,
+            tabu_iters, tabu_tenure, tabu_patience,
+            hho_pop, hho_iters, sa_iters, kempe_iters,
+            alns_iters, gd_iters, abc_pop, abc_iters,
+            ga_pop, ga_iters, lahc_iters, lahc_list,
+            seed, verbose);
+        write_solution_file(r.sol, sln_dir + "/solution_natural_selection_" + ne_str + ".sln");
         results.push_back(move(r));
     }
 

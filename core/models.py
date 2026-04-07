@@ -152,11 +152,7 @@ class ProblemInstance:
         """Number of other exams conflicting with this exam."""
         if self.conflict_matrix is None:
             self.build_derived_data()
-        count = 0
-        for (e1, e2) in self.conflict_matrix:
-            if e1 == exam_id or e2 == exam_id:
-                count += 1
-        return count
+        return self.exam_degree[exam_id]
 
     def summary(self) -> str:
         if self.conflict_matrix is None:

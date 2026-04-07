@@ -98,10 +98,18 @@ inline std::vector<int> destroy_worst(
             if (nb_pid == pid)
                 cost += 100000;
             else if (nb_pid >= 0) {
+                // Proximity costs: two_in_a_row, two_in_a_day, period_spread
+                if (fe.period_day[pid] == fe.period_day[nb_pid]) {
+                    int g = std::abs(fe.period_daypos[pid] - fe.period_daypos[nb_pid]);
+                    if (g == 1) cost += fe.w_2row;
+                    else if (g > 1) cost += fe.w_2day;
+                }
                 int gap = std::abs(pid - nb_pid);
                 if (gap > 0 && gap <= fe.w_spread) cost += 1;
             }
         }
+        // Period/room penalty contribution
+        cost += fe.period_pen[pid] + fe.room_pen[sol.room_of[e]];
         costs.push_back({cost, e});
     }
     std::sort(costs.begin(), costs.end(), [](auto& a, auto& b) { return a.first > b.first; });
@@ -239,7 +247,8 @@ inline AlgoResult solve_alns(
     int max_iterations  = 2000,
     double destroy_pct  = 0.15,
     int seed            = 42,
-    bool verbose        = false)
+    bool verbose        = false,
+    const Solution* init_sol = nullptr)
 {
     using namespace alns_detail;
     auto t0 = std::chrono::high_resolution_clock::now();
@@ -260,8 +269,9 @@ inline AlgoResult solve_alns(
     }
 
     // Init from greedy
-    auto greedy_res = solve_greedy(prob, false);
-    Solution sol = greedy_res.sol.copy();
+    Solution sol;
+    if (init_sol) { sol = init_sol->copy(); }
+    else { auto g = solve_greedy(prob, false); sol = g.sol.copy(); }
 
     EvalResult ev = fe.full_eval(sol);
 
@@ -282,7 +292,9 @@ inline AlgoResult solve_alns(
     double best_fitness = current_fitness;
     bool best_feasible = ev.feasible();
 
-    int n_destroy = std::max(1, (int)(ne * destroy_pct));
+    int n_destroy_base = std::max(1, (int)(ne * destroy_pct));
+    int n_destroy = n_destroy_base;
+    int no_improve_alns = 0;
 
     // SA acceptance — calibrate from random soft-only move deltas
     double temp;
@@ -363,12 +375,23 @@ inline AlgoResult solve_alns(
                 best_fitness = new_fitness;
                 best_feasible = nf;
                 score = 3.0;
+                no_improve_alns = 0;
+                n_destroy = n_destroy_base;  // reset destroy size on improvement
                 if (verbose && (it < 10 || it % 200 == 0))
                     std::cerr << "[ALNS] Iter " << it << ": best hard=" << new_ev.hard()
                               << " soft=" << new_ev.soft() << std::endl;
+            } else {
+                no_improve_alns++;
             }
         } else {
             restore_state(sol, saved);
+            no_improve_alns++;
+        }
+
+        // Adaptive destroy size: grow when stuck, cap at 40%
+        if (no_improve_alns > 0 && no_improve_alns % 100 == 0) {
+            n_destroy = std::min(std::max(1, (int)(ne * 0.4)),
+                                 n_destroy + std::max(1, ne / 20));
         }
 
         d_scores[d_op] += score;
@@ -393,6 +416,8 @@ inline AlgoResult solve_alns(
         if ((it + 1) % 200 == 0 && current_fitness >= best_fitness)
             temp = std::max(temp, init_temp * 0.3);
     }
+
+    fe.optimize_rooms(best_sol);
 
     auto t1 = std::chrono::high_resolution_clock::now();
     double rt = std::chrono::duration<double>(t1 - t0).count();
