@@ -41,7 +41,7 @@ That runs every C++ algorithm on set4 (273 exams — small and fast) and drops t
 
 ## Headline results
 
-Lower is better everywhere. **HHO** wins on quality. **Greedy** wins on speed. **Tabu** is the all-rounder. The tightly-constrained sets (5 and 8) punish anything that can't reason carefully about room capacity. (this is for the older algos, this will soon be refactor to include new algos)
+Lower is better everywhere. **HHO** wins on quality. **Greedy** wins on speed. **Tabu** is the all-rounder. The tightly-constrained sets (5 and 8) punish anything that can't reason carefully about room capacity.
 
 <p align="center">
   <img src="docs/images/heatmap.png" width="860" alt="Cross-dataset soft penalty heatmap">
@@ -247,7 +247,7 @@ exam_scheduling/
 
 ## Notes on GenAI use
 
-AI-assisted coding was used throughout this project. All benchmarking, experimental design, and technical writing were done by the (non-AI) entity.
+AI-assisted coding was used throughout this project. All benchmarking, experimental design, and technical writing were done by the (non-AI) author.
 
 ## References
 
