@@ -4,7 +4,7 @@ OPTIMIZATION
 
 from __future__ import annotations
 from dataclasses import dataclass
-from data.models import ProblemInstance, Solution
+from core.models import ProblemInstance, Solution
 
 
 @dataclass

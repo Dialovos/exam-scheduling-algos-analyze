@@ -18,22 +18,33 @@ import time
 import tempfile
 from pathlib import Path
 
-from data.models import ProblemInstance, Solution
-from data.fast_eval import FastEvaluator, EvalBreakdown
+from core.models import ProblemInstance, Solution
+from core.fast_eval import FastEvaluator, EvalBreakdown
+from tooling.tuned_params import load_params_flat as _load_golden_flat
+
+# Load golden defaults once at import time
+_GP = _load_golden_flat()
 
 
 def run_solver(
     problem_or_path,
     algo: str = 'all',
-    tabu_iters: int = 2000,
-    tabu_tenure: int = 20,
-    tabu_patience: int = 500,
-    hho_pop: int = 30,
-    hho_iters: int = 200,
-    sa_iters: int = 5000,
-    kempe_iters: int = 3000,
-    alns_iters: int = 2000,
-    gd_iters: int = 5000,
+    tabu_iters: int = _GP.get('tabu_iters', 2000),
+    tabu_tenure: int = _GP.get('tabu_tenure', 20),
+    tabu_patience: int = _GP.get('tabu_patience', 500),
+    hho_pop: int = _GP.get('hho_pop', 30),
+    hho_iters: int = _GP.get('hho_iters', 200),
+    sa_iters: int = _GP.get('sa_iters', 5000),
+    kempe_iters: int = _GP.get('kempe_iters', 3000),
+    alns_iters: int = _GP.get('alns_iters', 2000),
+    gd_iters: int = _GP.get('gd_iters', 5000),
+    abc_pop: int = _GP.get('abc_pop', 30),
+    abc_iters: int = _GP.get('abc_iters', 3000),
+    ga_pop: int = _GP.get('ga_pop', 50),
+    ga_iters: int = _GP.get('ga_iters', 500),
+    lahc_iters: int = _GP.get('lahc_iters', 5000),
+    lahc_list: int = _GP.get('lahc_list', 0),
+    ns_finalists: int = 3,
     seed: int = 42,
     limit: int = 0,
     output_dir: str = 'results',
@@ -56,8 +67,8 @@ def run_solver(
         dict: {algo_name: {'solution': Solution, 'runtime': float,
                'evaluation': EvalBreakdown, 'algorithm': str, 'iterations': int}}
     """
-    from data.parser import parse_itc2007_exam
-    from data.generator import write_itc2007_format
+    from core.parser import parse_itc2007_exam
+    from core.generator import write_itc2007_format
 
     # Resolve filepath and problem
     if isinstance(problem_or_path, str):
@@ -80,17 +91,20 @@ def run_solver(
         tabu_patience=tabu_patience, hho_pop=hho_pop,
         hho_iters=hho_iters, sa_iters=sa_iters,
         kempe_iters=kempe_iters, alns_iters=alns_iters,
-        gd_iters=gd_iters, seed=seed,
-        output_dir=output_dir, verbose=verbose,
+        gd_iters=gd_iters, abc_pop=abc_pop,
+        abc_iters=abc_iters, ga_pop=ga_pop,
+        ga_iters=ga_iters, lahc_iters=lahc_iters,
+        lahc_list=lahc_list, ns_finalists=ns_finalists,
+        seed=seed, output_dir=output_dir, verbose=verbose,
     )
 
 
 def _find_binary():
     """Locate the compiled C++ exam_solver binary."""
     candidates = [
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'cpp', 'exam_solver'),
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), 'cpp', 'exam_solver'),
-        os.path.join('.', 'cpp', 'exam_solver'),
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'cpp', 'build', 'exam_solver'),
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), 'cpp', 'build', 'exam_solver'),
+        os.path.join('.', 'cpp', 'build', 'exam_solver'),
         os.path.join('.', 'exam_solver'),
         'exam_solver',
     ]
@@ -103,8 +117,8 @@ def _find_binary():
 def _build_binary():
     """Attempt to compile the C++ solver."""
     src_candidates = [
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'cpp', 'main.cpp'),
-        os.path.join('.', 'cpp', 'main.cpp'),
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'cpp', 'src', 'main.cpp'),
+        os.path.join('.', 'cpp', 'src', 'main.cpp'),
     ]
     src = None
     for c in src_candidates:
@@ -116,7 +130,10 @@ def _build_binary():
         return None
 
     src_dir = os.path.dirname(src)
-    out = os.path.join(src_dir, 'exam_solver')
+    # src_dir is cpp/src; put the binary in cpp/build
+    build_dir = os.path.join(os.path.dirname(src_dir), 'build')
+    os.makedirs(build_dir, exist_ok=True)
+    out = os.path.join(build_dir, 'exam_solver')
     print(f"[C++ Bridge] Compiling {src}...")
     try:
         result = subprocess.run(
@@ -177,10 +194,24 @@ def _load_solution(problem: ProblemInstance, sln_path: str) -> Solution:
     return sol
 
 
-def _run_python_fallback(problem, algo='all', tabu_iters=200, tabu_tenure=15,
-                         tabu_patience=50, hho_pop=30, hho_iters=100,
-                         sa_iters=5000, kempe_iters=3000, alns_iters=2000,
-                         gd_iters=5000, seed=42, verbose=True):
+def _run_python_fallback(problem, algo='all',
+                         tabu_iters=_GP.get('tabu_iters', 2000),
+                         tabu_tenure=_GP.get('tabu_tenure', 20),
+                         tabu_patience=_GP.get('tabu_patience', 500),
+                         hho_pop=_GP.get('hho_pop', 30),
+                         hho_iters=_GP.get('hho_iters', 200),
+                         sa_iters=_GP.get('sa_iters', 5000),
+                         kempe_iters=_GP.get('kempe_iters', 3000),
+                         alns_iters=_GP.get('alns_iters', 2000),
+                         gd_iters=_GP.get('gd_iters', 5000),
+                         abc_pop=_GP.get('abc_pop', 30),
+                         abc_iters=_GP.get('abc_iters', 3000),
+                         ga_pop=_GP.get('ga_pop', 50),
+                         ga_iters=_GP.get('ga_iters', 500),
+                         lahc_iters=_GP.get('lahc_iters', 5000),
+                         lahc_list=_GP.get('lahc_list', 0),
+                         ns_finalists=3,
+                         seed=42, verbose=True):
     """Run Python implementations when C++ binary is unavailable."""
     from algorithms.greedy import solve_greedy
     from algorithms.tabu_search import solve_tabu
@@ -189,6 +220,9 @@ def _run_python_fallback(problem, algo='all', tabu_iters=200, tabu_tenure=15,
     from algorithms.simulated_annealing import solve_sa
     from algorithms.alns import solve_alns
     from algorithms.great_deluge import solve_great_deluge
+    from algorithms.abc import solve_abc
+    from algorithms.ga import solve_ga
+    from algorithms.natural_selection import solve_natural_selection
 
     results = {}
 
@@ -248,6 +282,40 @@ def _run_python_fallback(problem, algo='all', tabu_iters=200, tabu_tenure=15,
         r['evaluation'] = _py_to_eval(r['evaluation'])
         results['Great Deluge'] = r
 
+    if algo in ('all', 'abc'):
+        if verbose:
+            print(f"\n{'─'*50}\nABC (Python, colony={abc_pop}, iters={abc_iters})...")
+        r = solve_abc(problem, colony_size=abc_pop, max_iterations=abc_iters,
+                      seed=seed, verbose=verbose)
+        r['evaluation'] = _py_to_eval(r['evaluation'])
+        results['ABC'] = r
+
+    if algo in ('all', 'ga'):
+        if verbose:
+            print(f"\n{'─'*50}\nGenetic Algorithm (Python, pop={ga_pop}, gens={ga_iters})...")
+        r = solve_ga(problem, pop_size=ga_pop, max_generations=ga_iters,
+                     seed=seed, verbose=verbose)
+        r['evaluation'] = _py_to_eval(r['evaluation'])
+        results['Genetic Algorithm'] = r
+
+    if algo in ('all', 'lahc'):
+        if verbose:
+            print(f"\n{'─'*50}\nLAHC: no Python implementation, skipping (C++ only)")
+
+    if algo == 'ns':
+        if verbose:
+            print(f"\n{'─'*50}\nNatural Selection (Python, finalists={ns_finalists})...")
+        r = solve_natural_selection(problem, n_finalists=ns_finalists,
+                                    tabu_iters=tabu_iters, tabu_patience=tabu_patience,
+                                    hho_pop=hho_pop, hho_iters=hho_iters,
+                                    sa_iters=sa_iters, kempe_iters=kempe_iters,
+                                    alns_iters=alns_iters, gd_iters=gd_iters,
+                                    abc_pop=abc_pop, abc_iters=abc_iters,
+                                    ga_pop=ga_pop, ga_iters=ga_iters,
+                                    seed=seed, verbose=verbose)
+        r['evaluation'] = _py_to_eval(r['evaluation'])
+        results['Natural Selection'] = r
+
     return results
 
 
@@ -262,18 +330,26 @@ def run_cpp_solver(
     problem: ProblemInstance,
     algo: str = 'all',
     limit: int = 0,
-    tabu_iters: int = 200,
-    tabu_tenure: int = 15,
-    tabu_patience: int = 50,
-    hho_pop: int = 30,
-    hho_iters: int = 100,
-    sa_iters: int = 5000,
-    kempe_iters: int = 3000,
-    alns_iters: int = 2000,
-    gd_iters: int = 5000,
+    tabu_iters: int = _GP.get('tabu_iters', 2000),
+    tabu_tenure: int = _GP.get('tabu_tenure', 20),
+    tabu_patience: int = _GP.get('tabu_patience', 500),
+    hho_pop: int = _GP.get('hho_pop', 30),
+    hho_iters: int = _GP.get('hho_iters', 200),
+    sa_iters: int = _GP.get('sa_iters', 5000),
+    kempe_iters: int = _GP.get('kempe_iters', 3000),
+    alns_iters: int = _GP.get('alns_iters', 2000),
+    gd_iters: int = _GP.get('gd_iters', 5000),
+    abc_pop: int = _GP.get('abc_pop', 30),
+    abc_iters: int = _GP.get('abc_iters', 3000),
+    ga_pop: int = _GP.get('ga_pop', 50),
+    ga_iters: int = _GP.get('ga_iters', 500),
+    lahc_iters: int = _GP.get('lahc_iters', 5000),
+    lahc_list: int = _GP.get('lahc_list', 0),
+    ns_finalists: int = 3,
     seed: int = 42,
     output_dir: str = 'results',
     verbose: bool = True,
+    init_solution_path: str = '',
 ) -> dict:
     """
     Run the C++ solver on the given .exam file.
@@ -291,7 +367,10 @@ def run_cpp_solver(
             tabu_patience=tabu_patience, hho_pop=hho_pop,
             hho_iters=hho_iters, sa_iters=sa_iters,
             kempe_iters=kempe_iters, alns_iters=alns_iters,
-            gd_iters=gd_iters, seed=seed, verbose=verbose)
+            gd_iters=gd_iters, abc_pop=abc_pop,
+            abc_iters=abc_iters, ga_pop=ga_pop,
+            ga_iters=ga_iters, ns_finalists=ns_finalists,
+            seed=seed, verbose=verbose)
 
     os.makedirs(output_dir, exist_ok=True)
 
@@ -308,9 +387,18 @@ def run_cpp_solver(
         '--kempe-iters', str(kempe_iters),
         '--alns-iters', str(alns_iters),
         '--gd-iters', str(gd_iters),
+        '--abc-pop', str(abc_pop),
+        '--abc-iters', str(abc_iters),
+        '--ga-pop', str(ga_pop),
+        '--ga-iters', str(ga_iters),
+        '--lahc-iters', str(lahc_iters),
+        '--lahc-list', str(lahc_list),
+        '--ns-finalists', str(ns_finalists),
         '--seed', str(seed),
         '--output-dir', output_dir,
     ]
+    if init_solution_path:
+        cmd.extend(['--init-solution', init_solution_path])
     if verbose:
         cmd.append('--verbose')
 

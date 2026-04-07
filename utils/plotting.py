@@ -41,7 +41,7 @@ try:
 except ImportError:
     HAS_MPL = False
 
-# ── Colorblind-friendly palette (Tableau 10) for all 8 algorithms ────────────
+# ── Colorblind-friendly palette for all algorithms ───────────────────────────
 ALGO_COLORS = {
     'Greedy':              '#4E79A7',
     'Tabu Search':         '#F28E2B',
@@ -50,19 +50,28 @@ ALGO_COLORS = {
     'Simulated Annealing': '#59A14F',
     'ALNS':                '#EDC948',
     'Great Deluge':        '#B07AA1',
-    'IP':                  '#FF9DA7',
+    'ABC':                 '#FF9DA7',
+    'Genetic Algorithm':   '#9C755F',
+    'LAHC':                '#BAB0AC',
+    'Natural Selection':   '#4B0082',
+    'IP':                  '#D37295',
 }
 ALGO_MARKERS = {
     'Greedy': 'o', 'Tabu Search': '^', 'HHO': 'D', 'Kempe Chain': 'v',
-    'Simulated Annealing': 's', 'ALNS': 'P', 'Great Deluge': 'X', 'IP': '*',
+    'Simulated Annealing': 's', 'ALNS': 'P', 'Great Deluge': 'X',
+    'ABC': 'h', 'Genetic Algorithm': 'p', 'LAHC': 'H',
+    'Natural Selection': '*', 'IP': 'd',
 }
 ALGO_SHORT = {
     'Greedy': 'Greedy', 'Tabu Search': 'Tabu', 'HHO': 'HHO',
     'Kempe Chain': 'Kempe', 'Simulated Annealing': 'SA',
-    'ALNS': 'ALNS', 'Great Deluge': 'GD', 'IP': 'IP',
+    'ALNS': 'ALNS', 'Great Deluge': 'GD',
+    'ABC': 'ABC', 'Genetic Algorithm': 'GA', 'LAHC': 'LAHC',
+    'Natural Selection': 'NS', 'IP': 'IP',
 }
 ALGO_ORDER = ['Greedy', 'Tabu Search', 'HHO', 'Kempe Chain',
-              'Simulated Annealing', 'ALNS', 'Great Deluge', 'IP']
+              'Simulated Annealing', 'ALNS', 'Great Deluge',
+              'ABC', 'Genetic Algorithm', 'LAHC', 'Natural Selection', 'IP']
 
 SOFT_KEYS   = ['two_in_a_row', 'two_in_a_day', 'period_spread',
                'non_mixed_durations', 'front_load', 'period_penalty', 'room_penalty']
@@ -455,7 +464,15 @@ def plot_summary_dashboard(df, dataset=None, save_path=None):
 # ═══════════════════════════════════════════════════════════════════════════════
 def plot_box_comparison(df, dataset=None, metric='soft_penalty',
                         title=None, save_path=None):
-    """Box-and-whisker showing distribution per algorithm."""
+    """Horizontal box + jittered strip plot — readable with 10+ algorithms.
+
+    Design choices (publication-quality):
+      - Horizontal: labels never clip or rotate, works for any algo count
+      - Jittered strip overlay: shows every data point (crucial for n<20)
+      - Mean diamond: distinguishes mean from median line
+      - Sorted by median: best algorithms on top for easy scanning
+      - Subdued box fill + clean spines: minimal chart-junk
+    """
     if not HAS_MPL: return
     _style()
     data = df[df['dataset'] == dataset] if dataset else df.copy()
@@ -468,24 +485,68 @@ def plot_box_comparison(df, dataset=None, metric='soft_penalty',
             valid_algos.append(a)
     if not valid_algos: return
 
+    # Sort by median (best on top after invert)
+    medians = [np.median(d) for d in box_data]
+    order = np.argsort(medians)[::-1]  # reversed because yaxis inverts
+    box_data = [box_data[i] for i in order]
+    valid_algos = [valid_algos[i] for i in order]
+
     n = len(valid_algos)
-    fig, ax = plt.subplots(figsize=(max(7, n * 1.2), 5))
-    positions = list(range(n))  # 0-based so ticks align with labels
-    bp = ax.boxplot(box_data, positions=positions, patch_artist=True, widths=0.5,
-                    medianprops=dict(color='black', linewidth=1.5),
-                    whiskerprops=dict(linewidth=1),
-                    capprops=dict(linewidth=1),
-                    flierprops=dict(marker='o', markersize=4, alpha=0.4))
+    fig, ax = plt.subplots(figsize=(10, max(3.5, n * 0.6 + 1)))
+    positions = list(range(n))
 
+    # Horizontal box: thin, transparent fill, no fliers (strip shows them)
+    bp = ax.boxplot(
+        box_data, positions=positions, vert=False, patch_artist=True,
+        widths=0.45, showfliers=False,
+        medianprops=dict(color='#222222', linewidth=2),
+        whiskerprops=dict(color='#666666', linewidth=1, linestyle='--'),
+        capprops=dict(color='#666666', linewidth=1),
+        showmeans=True,
+        meanprops=dict(marker='D', markerfacecolor='#E03030',
+                       markeredgecolor='white', markersize=5.5,
+                       markeredgewidth=0.8, zorder=5),
+    )
     for patch, algo in zip(bp['boxes'], valid_algos):
-        patch.set_facecolor(_c(algo))
-        patch.set_alpha(0.78)
-        patch.set_edgecolor('gray')
-        patch.set_linewidth(0.6)
+        color = _c(algo)
+        patch.set_facecolor(color)
+        patch.set_alpha(0.30)
+        patch.set_edgecolor(color)
+        patch.set_linewidth(1.2)
 
-    _apply_xlabels(ax, valid_algos)
-    _kfmt(ax)
-    ax.set_ylabel(METRIC_LABELS.get(metric, metric))
+    # Jittered strip overlay — show every individual data point
+    rng = np.random.RandomState(0)
+    for i, (vals, algo) in enumerate(zip(box_data, valid_algos)):
+        jitter = rng.uniform(-0.15, 0.15, size=len(vals))
+        ax.scatter(vals, i + jitter, color=_c(algo), alpha=0.65,
+                   s=22, edgecolor='white', linewidth=0.4, zorder=4)
+
+    # Annotation: median value to the right
+    x_max = max(np.max(d) for d in box_data)
+    x_min = min(np.min(d) for d in box_data)
+    pad = (x_max - x_min) * 0.02
+    for i, vals in enumerate(box_data):
+        med = np.median(vals)
+        ax.text(x_max + pad, i, f'{med:,.0f}', va='center', ha='left',
+                fontsize=8.5, color='#444444', fontstyle='italic')
+
+    ax.set_yticks(positions)
+    ax.set_yticklabels([_short(a) for a in valid_algos], fontsize=10)
+    ax.set_xlim(x_min - (x_max - x_min) * 0.05,
+                x_max + (x_max - x_min) * 0.18)
+    _kfmt(ax, 'x')
+    ax.set_xlabel(METRIC_LABELS.get(metric, metric))
+
+    # Legend for mean marker
+    from matplotlib.lines import Line2D
+    legend_elements = [
+        Line2D([0], [0], marker='D', color='w', markerfacecolor='#E03030',
+               markeredgecolor='white', markersize=5.5, label='Mean'),
+        Line2D([0], [0], color='#222222', linewidth=2, label='Median'),
+    ]
+    ax.legend(handles=legend_elements, loc='lower right', fontsize=8,
+              framealpha=0.8)
+
     ax.set_title(title or f"Distribution: {METRIC_LABELS.get(metric, metric)}"
                  f"{' — ' + dataset if dataset else ''}", fontweight='bold')
     fig.tight_layout()

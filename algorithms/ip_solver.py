@@ -15,8 +15,8 @@ Key optimizations over the original:
   6. tracemalloc removed from hot path (measured externally if needed)
 """
 
-from data.models import ProblemInstance, Solution
-from data.evaluator import evaluate
+from core.models import ProblemInstance, Solution
+from core.evaluator import evaluate
 import time
 import collections
 

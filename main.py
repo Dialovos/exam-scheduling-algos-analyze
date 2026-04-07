@@ -6,7 +6,7 @@ IP solver → Python (PuLP/CBC)
 
 Usage:
   python main.py
-  python main.py --dataset datasets/exam_comp_set4.exam
+  python main.py --dataset instances/exam_comp_set4.exam
   python main.py --dataset data.exam --algo tabu
   python main.py --dataset data.exam --algo ip --limit 100
 """
@@ -18,12 +18,13 @@ import json
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from data.models import ProblemInstance, Solution
-from data.generator import generate_synthetic, write_itc2007_format
-from data.parser import parse_itc2007_exam, write_solution_itc2007
+from core.models import ProblemInstance, Solution
+from core.generator import generate_synthetic, write_itc2007_format
+from core.parser import parse_itc2007_exam, write_solution_itc2007
 from algorithms.cpp_bridge import run_cpp_solver
 from utils.plotting import plot_soft_constraint_breakdown
 from utils.batch_manager import BatchManager
+from tooling.tuned_params import load_params_flat, load_metadata
 
 try:
     from algorithms.ip_solver import solve_ip
@@ -80,7 +81,7 @@ def run_demo(size=50, algo=None, verbose=True, output_dir='results', **kwargs):
     print(problem.summary())
 
     os.makedirs("datasets", exist_ok=True)
-    exam_path = f"datasets/synthetic_{size}.exam"
+    exam_path = f"instances/synthetic_{size}.exam"
     write_itc2007_format(problem, exam_path)
 
     os.makedirs(output_dir, exist_ok=True)
@@ -154,13 +155,41 @@ def run_on_dataset(filepath, limit=0, algo=None, verbose=True, output_dir='resul
         write_solution_itc2007(r['solution'], os.path.join(sln_dir, f"solution_{safe}_{problem.num_exams()}.sln"))
     print(f"\nSolutions saved to {sln_dir}/")
 
+    # Passive regression check against golden params baseline
+    _check_regression(filepath, results)
+
+
+def _check_regression(filepath, results, threshold=0.15):
+    """Passive check: warn if any result is much worse than golden baseline."""
+    meta = load_metadata()
+    if not meta:
+        return
+    golden_ds = meta.get('per_dataset_scores', {})
+    ds_label = os.path.splitext(os.path.basename(filepath))[0]
+    expected = golden_ds.get(ds_label)
+    if expected is None or expected <= 0:
+        return
+
+    for name, r in results.items():
+        ev = r['evaluation']
+        hard = ev.hard if hasattr(ev, 'hard') else ev.hard_violations
+        if hard > 0:
+            continue
+        soft = ev.soft if hasattr(ev, 'soft') else ev.soft_penalty
+        if soft > 0 and expected > 0:
+            regression = (soft - expected) / expected
+            if regression > threshold:
+                print(f"\n  WARNING: {name} scored {soft:.0f} but tuned baseline "
+                      f"expects ~{expected:.0f} on {ds_label} "
+                      f"(+{regression:.0%} regression)")
+
 
 def main():
     ap = argparse.ArgumentParser(
         description="Exam Scheduling Benchmark Suite v3 (C++ Optimized)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Algorithms:  greedy, tabu, hho, kempe, sa, alns, gd → C++  |  ip → Python (OR-Tools)
+Algorithms:  greedy, tabu, hho, kempe, sa, alns, gd, abc, ga, lahc → C++  |  ns → meta  |  ip → Python
 
 Examples:
   python main.py                                        # Demo 50 exams
@@ -168,10 +197,15 @@ Examples:
   python main.py --dataset data.exam --algo tabu        # Tabu only
   python main.py --dataset data.exam --algo ip --limit 100
   python main.py --mode plot
+  python main.py --mode tune --dataset data.exam        # Auto-tune params + chains
+  python main.py --mode tune --dataset data.exam --resume  # Resume tuning
         """)
 
-    ap.add_argument('--mode', choices=['demo', 'plot', 'batches'], default='demo')
-    ap.add_argument('--algo', choices=['greedy', 'ip', 'tabu', 'hho', 'kempe', 'sa', 'alns', 'gd'])
+    # Load golden params for argparse defaults
+    _gp = load_params_flat()
+
+    ap.add_argument('--mode', choices=['demo', 'plot', 'batches', 'tune'], default='demo')
+    ap.add_argument('--algo', choices=['greedy', 'ip', 'tabu', 'hho', 'kempe', 'sa', 'alns', 'gd', 'abc', 'ga', 'lahc', 'ns'])
     ap.add_argument('--size', type=int, default=50)
     ap.add_argument('--dataset', type=str)
     ap.add_argument('--limit', type=int, default=0)
@@ -184,21 +218,86 @@ Examples:
                     help='Load existing batch by ID/name instead of creating new.')
     ap.add_argument('--no-batch', action='store_true',
                     help='Disable batching, write directly to results/.')
-    ap.add_argument('--tabu-iters', type=int, default=2000)
-    ap.add_argument('--tabu-patience', type=int, default=500)
-    ap.add_argument('--hho-pop', type=int, default=50)
-    ap.add_argument('--hho-iters', type=int, default=500)
-    ap.add_argument('--sa-iters', type=int, default=5000)
-    ap.add_argument('--kempe-iters', type=int, default=3000)
-    ap.add_argument('--alns-iters', type=int, default=2000)
-    ap.add_argument('--gd-iters', type=int, default=5000)
+    ap.add_argument('--tabu-iters', type=int, default=_gp.get('tabu_iters', 2000))
+    ap.add_argument('--tabu-patience', type=int, default=_gp.get('tabu_patience', 500))
+    ap.add_argument('--hho-pop', type=int, default=_gp.get('hho_pop', 30))
+    ap.add_argument('--hho-iters', type=int, default=_gp.get('hho_iters', 200))
+    ap.add_argument('--sa-iters', type=int, default=_gp.get('sa_iters', 5000))
+    ap.add_argument('--kempe-iters', type=int, default=_gp.get('kempe_iters', 3000))
+    ap.add_argument('--alns-iters', type=int, default=_gp.get('alns_iters', 2000))
+    ap.add_argument('--gd-iters', type=int, default=_gp.get('gd_iters', 5000))
+    ap.add_argument('--abc-pop', type=int, default=_gp.get('abc_pop', 30))
+    ap.add_argument('--abc-iters', type=int, default=_gp.get('abc_iters', 3000))
+    ap.add_argument('--ga-pop', type=int, default=_gp.get('ga_pop', 50))
+    ap.add_argument('--ga-iters', type=int, default=_gp.get('ga_iters', 500))
+    ap.add_argument('--lahc-iters', type=int, default=_gp.get('lahc_iters', 5000))
+    ap.add_argument('--lahc-list', type=int, default=_gp.get('lahc_list', 0))
+    ap.add_argument('--ns-finalists', type=int, default=3)
+
+    # Param management
+    ap.add_argument('--show-params', action='store_true',
+                    help='Print active param defaults and exit')
+    ap.add_argument('--rollback-params', type=int, metavar='VERSION',
+                    help='Rollback golden params to a specific version and exit')
+    ap.add_argument('--no-auto-update', action='store_true',
+                    help='Do not auto-update golden params after tuning')
+    ap.add_argument('--force-update', action='store_true',
+                    help='Force-update golden params even if checks fail')
+
+    # Auto-tuner options
+    ap.add_argument('--tune-workers', type=int, default=6,
+                    help='Max parallel workers for tuning (default: 6)')
+    ap.add_argument('--param-trials', type=int, default=15,
+                    help='Param tuning trials per algo (default: 15)')
+    ap.add_argument('--chain-pop', type=int, default=12,
+                    help='Chain population size (default: 12)')
+    ap.add_argument('--chain-rounds', type=int, default=5,
+                    help='Chain tournament rounds (default: 5)')
+    ap.add_argument('--resume', action='store_true',
+                    help='Resume auto-tuner from checkpoint')
 
     args = ap.parse_args()
+
+    # --show-params: print active defaults and exit
+    if args.show_params:
+        from tooling.tuned_params import load_params, list_versions
+        params = load_params()
+        meta = load_metadata()
+        print("Active algorithm defaults:")
+        for algo, p in sorted(params.items()):
+            print(f"  {algo:<8} {p}")
+        if meta:
+            print(f"\nSource: tuned_params.json (v{meta.get('version', '?')}, "
+                  f"{meta.get('timestamp', '?')})")
+            print(f"Aggregate score: {meta.get('aggregate_score', '?')}")
+        else:
+            print("\nSource: hardcoded fallback (no tuned_params.json)")
+        versions = list_versions()
+        if versions:
+            print(f"\nVersion history ({len(versions)} entries):")
+            for v, ts, sc, src in versions[-5:]:
+                print(f"  v{v} {ts} score={sc} ({src})")
+        return
+
+    # --rollback-params: restore a past version and exit
+    if args.rollback_params is not None:
+        from tooling.tuned_params import rollback
+        v = rollback(args.rollback_params)
+        if v is not None:
+            print(f"Rolled back to version {v}")
+        else:
+            print(f"Version {args.rollback_params} not found in log")
+        return
+
     verbose = not args.quiet
     kw = dict(tabu_iters=args.tabu_iters, tabu_patience=args.tabu_patience,
               hho_pop=args.hho_pop, hho_iters=args.hho_iters,
               sa_iters=args.sa_iters, kempe_iters=args.kempe_iters,
               alns_iters=args.alns_iters, gd_iters=args.gd_iters,
+              abc_pop=args.abc_pop, abc_iters=args.abc_iters,
+              ga_pop=args.ga_pop, ga_iters=args.ga_iters,
+              lahc_iters=args.lahc_iters, lahc_list=args.lahc_list,
+              ns_finalists=args.ns_finalists,
               seed=args.seed)
 
     # Resolve output directory via batch manager
@@ -215,6 +314,31 @@ Examples:
             output_dir = bm.load_batch(args.load_batch)
         else:
             output_dir = bm.new_batch(args.batch)
+
+    if args.mode == 'tune':
+        from tooling.auto_tuner import AutoTuner
+        datasets = []
+        if args.dataset:
+            datasets.append(args.dataset)
+        else:
+            # Default to all ITC sets in global mode
+            import glob as g
+            datasets = sorted(g.glob('instances/exam_comp_set*.exam'))
+        if not datasets:
+            print("Error: --dataset or instances/exam_comp_set*.exam required for tune mode")
+            return
+        tune_dir = os.path.join(output_dir, 'tuning')
+        AutoTuner(
+            datasets=datasets, output_dir=tune_dir,
+            max_workers=args.tune_workers,
+            param_trials=args.param_trials,
+            chain_pop=args.chain_pop,
+            chain_rounds=args.chain_rounds,
+            seed=args.seed,
+            auto_update=not args.no_auto_update,
+            force_update=args.force_update,
+        ).run(resume=args.resume)
+        return
 
     if args.dataset:
         run_on_dataset(args.dataset, limit=args.limit, algo=args.algo,

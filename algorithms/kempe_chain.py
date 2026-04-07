@@ -9,8 +9,8 @@ Uses full_eval for chain assessment (chains can be large).
 import time
 import random as _random
 from collections import deque
-from data.models import ProblemInstance, Solution
-from data.fast_eval import FastEvaluator
+from core.models import ProblemInstance, Solution
+from core.fast_eval import FastEvaluator
 from algorithms.greedy import solve_greedy
 
 

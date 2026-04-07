@@ -26,7 +26,8 @@ inline AlgoResult solve_tabu(
     int tabu_tenure    = 20,
     int patience       = 500,
     int seed           = 42,
-    bool verbose       = false)
+    bool verbose       = false,
+    const Solution* init_sol = nullptr)
 {
     auto t0 = std::chrono::high_resolution_clock::now();
     std::mt19937 rng(seed);
@@ -51,8 +52,9 @@ inline AlgoResult solve_tabu(
     }
 
     // ── Init from greedy ──
-    auto greedy_res = solve_greedy(prob, verbose);
-    Solution sol = greedy_res.sol.copy();
+    Solution sol;
+    if (init_sol) { sol = init_sol->copy(); }
+    else { auto g = solve_greedy(prob, verbose); sol = g.sol.copy(); }
     FastEvaluator fe(prob);
 
     EvalResult ev = fe.full_eval(sol);
@@ -138,8 +140,7 @@ inline AlgoResult solve_tabu(
             for (int pid : tgts) {
                 if (pid == cp) continue;
                 auto& rooms = valid_r[eid];
-                int rmax = std::min(3, (int)rooms.size());
-                for (int ri = 0; ri < rmax; ri++) {
+                for (int ri = 0; ri < (int)rooms.size(); ri++) {
                     int rid = rooms[ri];
                     double d = fe.move_delta(sol, eid, pid, rid);
                     bool is_tabu = tabu.count(tabu_key(eid, cp)) &&
@@ -244,6 +245,8 @@ inline AlgoResult solve_tabu(
             current_fitness = fe.full_eval(sol).fitness();
         }
     }
+
+    fe.optimize_rooms(best_sol);
 
     auto t1 = std::chrono::high_resolution_clock::now();
     double rt = std::chrono::duration<double>(t1 - t0).count();

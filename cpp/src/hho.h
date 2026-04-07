@@ -170,7 +170,8 @@ inline AlgoResult solve_hho(
     int pop_size   = 30,
     int max_iters  = 100,
     int seed       = 42,
-    bool verbose   = false)
+    bool verbose   = false,
+    const Solution* init_sol = nullptr)
 {
     using namespace hho_detail;
     auto t0 = std::chrono::high_resolution_clock::now();
@@ -180,11 +181,11 @@ inline AlgoResult solve_hho(
     std::mt19937 rng(seed);
 
     // ── Initialize population ──
-    auto greedy_res = solve_greedy(prob, false);
     std::vector<Solution> population;
     std::vector<double> fitness;
 
-    population.push_back(greedy_res.sol.copy());
+    if (init_sol) { population.push_back(init_sol->copy()); }
+    else { auto g = solve_greedy(prob, false); population.push_back(g.sol.copy()); }
     fitness.push_back(fe.full_eval(population[0]).fitness());
 
     for (int i = 1; i < pop_size; i++) {
@@ -293,6 +294,8 @@ inline AlgoResult solve_hho(
             std::cerr << "[HHO] Iter " << t << ": best=" << rabbit_fitness << std::endl;
         }
     }
+
+    fe.optimize_rooms(rabbit);
 
     auto t1 = std::chrono::high_resolution_clock::now();
     double rt = std::chrono::duration<double>(t1 - t0).count();

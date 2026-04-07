@@ -7,16 +7,18 @@ Models real ITC 2007 characteristics analyzed from sets 4, 5, and 7:
   - COINCIDENCE, EXCLUSION, AFTER hard constraints
   - Varied room capacities (10x+ range)
 
-Presets (n=200):
-  "easy"        — 60 periods, 3 rooms, few constraints
-  "medium"      — 30 periods, 2 rooms, moderate constraints
-  "hard"        — 15 periods, 2 rooms, many constraints
-  "competition" — 10 periods, 1 room, tightest
+Presets (approximate at n=200, scales with instance size):
+  "easy"        — many periods/rooms, few constraints
+  "medium"      — moderate capacity, moderate constraints
+  "hard"        — tight capacity, many constraints
+  "competition" — tightest ratios, closest to ITC 2007 difficulty
+
+A feasibility floor ensures enough room×period slots exist at any size.
 """
 
 import random
 import numpy as np
-from data.models import (
+from core.models import (
     ProblemInstance, Exam, Period, Room,
     PeriodHardConstraint, RoomHardConstraint,
     InstitutionalWeightings,
@@ -86,7 +88,7 @@ def generate_synthetic(
 
     # ── Periods: tight count based on period_ratio ──
     ppd = cfg['periods_per_day']
-    np_ = max(3, int(ne * cfg['period_ratio']))
+    np_ = max(3, round(ne * cfg['period_ratio']))
     num_days = max(1, (np_ + ppd - 1) // ppd)
     np_ = num_days * ppd
 
@@ -111,7 +113,13 @@ def generate_synthetic(
             periods[idx].penalty = int(val)
 
     # ── Rooms ──
-    nr = max(1, int(ne * cfg['room_count_ratio']))
+    nr = max(1, round(ne * cfg['room_count_ratio']))
+    # Feasibility floor: ensure enough room×period slots for all exams.
+    # Target ≤6 exams per slot — tighter ratios make greedy construction
+    # nearly impossible regardless of algorithm quality.
+    max_exams_per_slot = 6
+    min_rooms = max(1, -(-ne // (np_ * max_exams_per_slot)))  # ceil div
+    nr = max(nr, min_rooms)
     rooms = []
     base = cfg['room_cap_base']
     spread = cfg['room_cap_spread']
