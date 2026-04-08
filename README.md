@@ -17,15 +17,11 @@
 
 ---
 
-## What's going on here
+## Abstract
 
-Capacitated examination timetabling is an NP-hard cousin of graph coloring. You start with a pile of exams, a bunch of students, a fixed set of periods, and a fixed set of rooms and you have to place every exam somewhere without:
+The exact problem flavor for this project is the Capacitated Examination Timetabling problem. The problem that we’re trying to solve is that when given a finite set of exams, students, available time slots, and rooms with a finite number of seating capacities, how can we assign every exam to exactly one pair (time slot, room) so that the hard constraint is satisfied while minimizing the soft constraints violation. The hard constraint is that no student is scheduled to take more than one exam in the same time slot, and that only one exam is assigned to that time slot, to avoid exceeding the room capacity. It should be considered that soft constraints, such as assigning a student to an adjacent time slot, may increase their fatigue for the latter exam. The objective is to ensure minimal penalty for each student-schedule pair within the available time slot for fairness.
 
-- sending any student to two papers at the same time
-- overflowing a room
-- (or) cramming a long exam into a short slot
-
-Those are the *hard* constraints. Once you're legal, the real fight begins: *soft* penalties for back-to-back exams, tight spreads, mixed durations in the same room, front-loading, and expensive period/room choices.
+The Examination Timetabling problem is NP-hard. Since it follows the graph-coloring approach, the exams are modeled as graph vertices, with an edge connecting any two exams that at least one student shares. Due to the NP-completeness of graph coloring and the need to minimize conflicts for soft constraints in the timetable, no known P algorithm has been found, according to my research. This means there will be an exponential worst-case scenario without using a heuristic approach to solving this problem. 
 
 One C++ solver hosting eleven algos (excluding a handler algo), a Python bridge that falls back gracefully when the binary isn't built, an auto-tuner that hunts for better defaults across datasets, and a handful of plot types for research-quality figures. Everything runs against the [ITC 2007 Examination Track](https://www.eeecs.qub.ac.uk/itc2007/examtrack/) benchmark and a synthetic generator.
 
@@ -101,7 +97,7 @@ A few optimizations matter more than the rest:
 - **Swap moves** — SA, LAHC, and GD expand their neighborhood beyond single-exam re-assignment by exchanging the periods of two exams at once.
 - **FastSA pruning** — at low temperature, "frozen" exams get skipped. About a 90% skip rate on inactive bins.
 - **Room post-processing** — `optimize_rooms()` runs a steepest-descent room reassignment on the final solution. Cheap, always worth it.
-- **Warm-start chaining** — `--init-solution` pipes one algorithm's output into the next (e.g. `SA → GD`), so later stages start from a better place.
+- **Warm-start chaining** — `--init-solution` pipes one algorithm's output into the next (e.g. `SA → GD`), so later stages start from a better place. The auto-tuner's winning chain is persisted into `tuned_params.json`, so the notebook can replay it without remembering the recipe.
 
 ## Auto-tuner
 
@@ -127,7 +123,7 @@ The pipeline runs in four phases:
 
 1. **Quick screen** — all algorithms on all datasets in parallel.
 2. **Parameter tuning** — random + perturbation sampling on a representative subset (small / medium / large auto-picked).
-3. **Chain discovery** — tournament natural selection over warm-started chains, evaluated across datasets.
+3. **Chain discovery** — tournament natural selection over warm-started chains, evaluated across datasets. The winning chain lands in `tuned_params.json` under `best_chain`, ready to be re-run from the notebook with one switch.
 4. **Final validation** — multi-seed on every dataset.
 
 **Anti-overfitting:** in global mode, scores are normalized per-dataset (score / baseline) and aggregated via geometric mean. A config that's great on set4 but terrible on set1 loses to one that's merely solid across both.
@@ -150,6 +146,21 @@ python main.py --rollback-params 2        # restore version 2 from log
 ```
 
 A passive regression checker also runs on normal executions — it warns you if results drift more than 15% below the tuned baseline. No blocking, just a heads-up.
+
+## Notebook experiments
+
+`exam_scheduling.ipynb` is the workbench for everything outside the CLI. The main experiment cell takes a single switch:
+
+- `EXPERIMENT_MODE = "individual"` — race every algorithm in `ALGO` against the configured datasets. The familiar tabu/sa/hho lineup.
+- `EXPERIMENT_MODE = "chain"` — run the tuned best chain (or a manual override) end-to-end and log it as a single composite `Chain(sa→gd)` entry, with feasibility, soft penalty, runtime, and peak memory all in one row.
+
+There's also a synthetic size scan that walks the chain across 25 → 200 exams in steps of 25 and plots quality, runtime, and peak memory on a continuous axis. Useful for spotting where a chain starts to choke before you commit to a full ITC run.
+
+<p align="center">
+  <img src="docs/images/scan_smoke.png" width="780" alt="Continuous size scan: soft penalty (left) and runtime + peak memory (right) vs problem size">
+</p>
+
+<p align="center"><sub><i>Continuous size scan. Quality on the left, runtime and peak RSS on a dual y-axis on the right. Memory is captured per subprocess by polling <code>/proc/&lt;pid&gt;/status</code>.</i></sub></p>
 
 ## Command reference
 

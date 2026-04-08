@@ -456,3 +456,156 @@ def run_cpp_solver(
         }
 
     return algo_results
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Chain execution (warm-started multi-step runs with memory capture)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def run_chain(dataset, chain_steps, seed=42, work_dir=None, timeout_per_step=300):
+    """Run a warm-started chain of algorithms with per-step memory tracking.
+
+    Each step writes its solution file; the next step reads it via --init-solution.
+    Memory is captured by polling /proc/<pid>/status for VmHWM (peak RSS) in
+    a watchdog thread while each subprocess runs. Linux-only (WSL2 OK).
+
+    Args:
+        dataset: Path to an ITC 2007 .exam file.
+        chain_steps: List of (algo_name, params_dict) tuples, e.g.
+            [("sa", {"sa_iters": 5000}), ("gd", {"gd_iters": 5000})]
+        seed: Random seed, passed to every step.
+        work_dir: Scratch directory for intermediate .sln files. If None,
+            a temp directory is created and removed automatically.
+        timeout_per_step: Per-step subprocess timeout in seconds.
+
+    Returns:
+        dict with keys:
+            soft_penalty     — int, from final step
+            hard_violations  — int, from final step
+            total_runtime    — float, sum of per-step runtimes (seconds)
+            memory_peak_mb   — float, max RSS observed across steps (MB)
+            per_step         — list of {algo, runtime, memory_mb}
+        Returns None if any step fails (timeout, bad JSON, non-zero exit).
+    """
+    import glob as _glob
+    import shutil as _shutil
+
+    binary = os.path.join(os.path.dirname(__file__), '..', 'cpp', 'build', 'exam_solver')
+    binary = os.path.abspath(binary)
+    if not os.path.isfile(binary):
+        print(f"[run_chain] C++ binary not found at {binary}")
+        return None
+
+    cleanup_work_dir = False
+    if work_dir is None:
+        work_dir = tempfile.mkdtemp(prefix='chain_')
+        cleanup_work_dir = True
+    else:
+        os.makedirs(work_dir, exist_ok=True)
+
+    try:
+        import threading as _threading
+
+        sln_path = None
+        per_step = []
+        final_result = None
+
+        for i, (algo, params) in enumerate(chain_steps):
+            step_dir = os.path.join(work_dir, f'step_{i}_{algo}')
+            os.makedirs(step_dir, exist_ok=True)
+
+            cmd = [binary, dataset, '--algo', algo, '--seed', str(seed),
+                   '--output-dir', step_dir]
+            for k, v in params.items():
+                cmd.extend(['--' + k.replace('_', '-'), str(int(v))])
+            if sln_path and os.path.isfile(sln_path):
+                cmd.extend(['--init-solution', sln_path])
+
+            try:
+                proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
+                                        stderr=subprocess.PIPE, text=True)
+            except OSError:
+                return None
+
+            # Watchdog thread polls /proc/<pid>/status for VmHWM (peak RSS).
+            # VmHWM is monotone-non-decreasing, so even a coarse poll captures
+            # the true peak as long as it samples once before the process exits.
+            peak_kb = [0]
+            stop_poll = _threading.Event()
+
+            def _poll(pid=proc.pid):
+                while not stop_poll.is_set():
+                    try:
+                        with open(f'/proc/{pid}/status') as f:
+                            for line in f:
+                                if line.startswith('VmHWM:'):
+                                    kb = int(line.split()[1])
+                                    if kb > peak_kb[0]:
+                                        peak_kb[0] = kb
+                                    break
+                    except (OSError, ValueError):
+                        return
+                    time.sleep(0.005)
+
+            poller = _threading.Thread(target=_poll, daemon=True)
+            poller.start()
+
+            try:
+                stdout_data, _stderr = proc.communicate(timeout=timeout_per_step)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.communicate()
+                stop_poll.set()
+                return None
+            finally:
+                stop_poll.set()
+                poller.join(timeout=0.1)
+
+            if proc.returncode != 0:
+                return None
+
+            try:
+                data = json.loads(stdout_data)
+                if not data:
+                    return None
+                step_result = data[0]
+            except (json.JSONDecodeError, IndexError):
+                return None
+
+            step_mem_mb = peak_kb[0] / 1024.0
+
+            per_step.append({
+                'algo': algo,
+                'runtime': float(step_result.get('runtime', 0.0)),
+                'memory_mb': step_mem_mb,
+            })
+            final_result = step_result
+
+            sln_files = _glob.glob(os.path.join(step_dir, 'solutions', '*.sln'))
+            sln_path = sln_files[0] if sln_files else None
+
+        if final_result is None:
+            return None
+
+        total_runtime = sum(s['runtime'] for s in per_step)
+        memory_peak_mb = max((s['memory_mb'] for s in per_step), default=0.0)
+        chain_label = 'Chain(' + '→'.join(s['algo'] for s in per_step) + ')'
+
+        return {
+            'soft_penalty': int(final_result.get('soft_penalty', 0)),
+            'hard_violations': int(final_result.get('hard_violations', 0)),
+            'total_runtime': total_runtime,
+            'memory_peak_mb': memory_peak_mb,
+            'per_step': per_step,
+            # Keys below let logger.log_run consume this dict directly
+            'algorithm': chain_label,
+            'runtime': total_runtime,
+            'evaluation': _parse_eval(final_result),
+            'iterations': sum(int(s.get('iterations', 0) or 0) for s in per_step),
+        }
+    finally:
+        if cleanup_work_dir:
+            try:
+                _shutil.rmtree(work_dir, ignore_errors=True)
+            except Exception:
+                pass

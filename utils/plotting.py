@@ -29,6 +29,7 @@ __all__ = [
     'plot_parameter_sensitivity', 'plot_summary_dashboard',
     'plot_box_comparison', 'plot_radar', 'plot_rank_table',
     'plot_convergence', 'plot_line_across_datasets', 'plot_soft_lines',
+    'plot_continuous_scan',
     'generate_all_plots', 'plot_soft_constraint_breakdown',
 ]
 
@@ -759,6 +760,99 @@ def plot_soft_lines(df, dataset=None, title=None, save_path=None):
     ax.set_title(title or f"Soft Components by Algorithm"
                  f"{' — ' + dataset if dataset else ''}", fontweight='bold')
     ax.legend(fontsize=8, ncol=2)
+    fig.tight_layout()
+    _save(fig, save_path)
+    return fig
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 15. Continuous Scan (size / parameter sweep with numeric x-axis)
+# ═══════════════════════════════════════════════════════════════════════════════
+def plot_continuous_scan(df, x_col='num_exams', title=None, save_path=None):
+    """Continuous-axis line chart for size/parameter scans.
+
+    Layout: two subplots side-by-side.
+      Left  — soft_penalty vs x_col, single line with ±std ribbon.
+      Right — runtime (left y-axis) + memory_peak_mb (right y-axis),
+              two lines with ±std ribbons, dual y-axis.
+
+    Aggregates rows by x_col using mean + std. Numeric x-axis (not categorical).
+
+    Expected df columns:
+        x_col, 'soft_penalty', 'runtime', 'memory_peak_mb'
+    Multiple rows per x value (e.g., multiple seeds) are aggregated.
+    """
+    if not HAS_MPL:
+        return
+    _style()
+
+    required = {x_col, 'soft_penalty', 'runtime', 'memory_peak_mb'}
+    missing = required - set(df.columns)
+    if missing:
+        print(f"[plot_continuous_scan] missing columns: {missing}")
+        return
+
+    grouped = df.groupby(x_col).agg(
+        soft_mean=('soft_penalty', 'mean'),
+        soft_std =('soft_penalty', 'std'),
+        rt_mean  =('runtime', 'mean'),
+        rt_std   =('runtime', 'std'),
+        mem_mean =('memory_peak_mb', 'mean'),
+        mem_std  =('memory_peak_mb', 'std'),
+    ).reset_index().fillna(0)
+
+    x = grouped[x_col].values
+
+    fig, (ax_l, ax_r) = plt.subplots(1, 2, figsize=(14, 5))
+
+    # ── Left: soft penalty ───────────────────────────────────
+    soft_color = '#E15759'  # HHO red
+    ax_l.plot(x, grouped['soft_mean'], '-o', color=soft_color,
+              linewidth=2.2, markersize=7, label='Soft Penalty')
+    ax_l.fill_between(x,
+                      grouped['soft_mean'] - grouped['soft_std'],
+                      grouped['soft_mean'] + grouped['soft_std'],
+                      color=soft_color, alpha=0.2)
+    ax_l.set_xlabel(x_col.replace('_', ' ').title())
+    ax_l.set_ylabel(METRIC_LABELS.get('soft_penalty', 'Soft Penalty'))
+    ax_l.set_title('Quality', fontweight='bold')
+    ax_l.grid(True, alpha=0.3)
+    _kfmt(ax_l)
+
+    # ── Right: runtime (left axis) + memory (right axis) ─────
+    rt_color  = '#F28E2B'  # Tabu orange
+    mem_color = '#4E79A7'  # Greedy blue
+
+    l1 = ax_r.plot(x, grouped['rt_mean'], '-o', color=rt_color,
+                   linewidth=2.2, markersize=7, label='Runtime (s)')
+    ax_r.fill_between(x,
+                      grouped['rt_mean'] - grouped['rt_std'],
+                      grouped['rt_mean'] + grouped['rt_std'],
+                      color=rt_color, alpha=0.2)
+    ax_r.set_xlabel(x_col.replace('_', ' ').title())
+    ax_r.set_ylabel('Runtime (s)', color=rt_color)
+    ax_r.tick_params(axis='y', labelcolor=rt_color)
+    ax_r.grid(True, alpha=0.3)
+
+    ax_r2 = ax_r.twinx()
+    l2 = ax_r2.plot(x, grouped['mem_mean'], '-s', color=mem_color,
+                    linewidth=2.2, markersize=7, label='Peak Memory (MB)')
+    ax_r2.fill_between(x,
+                       grouped['mem_mean'] - grouped['mem_std'],
+                       grouped['mem_mean'] + grouped['mem_std'],
+                       color=mem_color, alpha=0.2)
+    ax_r2.set_ylabel('Peak Memory (MB)', color=mem_color)
+    ax_r2.tick_params(axis='y', labelcolor=mem_color)
+    ax_r2.grid(False)
+
+    ax_r.set_title('Cost', fontweight='bold')
+
+    lines = l1 + l2
+    labels = [ln.get_label() for ln in lines]
+    ax_r.legend(lines, labels, loc='upper left', fontsize=9)
+
+    if title:
+        fig.suptitle(title, fontsize=13, fontweight='bold', y=1.02)
     fig.tight_layout()
     _save(fig, save_path)
     return fig
