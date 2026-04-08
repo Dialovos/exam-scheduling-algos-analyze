@@ -111,6 +111,51 @@ def save_params(params, aggregate_score, per_dataset_scores=None,
     return version
 
 
+# ── Best Chain persistence ──────────────────────────────────
+
+def load_best_chain():
+    """Load the best chain from tuned_params.json.
+
+    Returns:
+        List of (algo_name, params_dict) tuples, or None if the
+        file is missing or has no best_chain key.
+    """
+    meta = load_metadata()
+    if not meta:
+        return None
+    chain = meta.get('best_chain')
+    if not chain:
+        return None
+    try:
+        return [(step[0], dict(step[1])) for step in chain]
+    except (IndexError, TypeError, ValueError):
+        return None
+
+
+def save_best_chain(chain, score):
+    """Atomically update best_chain + best_chain_score in tuned_params.json.
+
+    Preserves all existing keys (params, aggregate_score, etc).
+    No-op if chain is empty or None.
+
+    Args:
+        chain: list of (algo_name, params_dict) tuples, or None
+        score: the chain's evaluation score (lower is better)
+    """
+    if not chain:
+        return
+    meta = load_metadata() or {}
+    meta['best_chain'] = [[algo, dict(params)] for algo, params in chain]
+    meta['best_chain_score'] = float(score)
+    if meta.get('version', 1) < 2:
+        meta['version'] = 2
+
+    tmp = str(_PARAMS_FILE) + '.tmp'
+    with open(tmp, 'w') as f:
+        json.dump(meta, f, indent=2)
+    os.replace(tmp, _PARAMS_FILE)
+
+
 def _next_version():
     """Get next version number from log."""
     log = _load_log()

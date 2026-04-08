@@ -32,6 +32,23 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 
+from algorithms.cpp_bridge import run_chain as _bridge_run_chain
+
+
+def run_chain(binary, dataset, chain_steps, seed, work_dir, timeout_per_step=300):
+    """Adapter: forwards to cpp_bridge.run_chain.
+
+    The `binary` arg is ignored — the bridge auto-discovers the binary path.
+    Kept for backward compatibility with existing call sites in this module.
+    """
+    return _bridge_run_chain(
+        dataset=dataset,
+        chain_steps=chain_steps,
+        seed=seed,
+        work_dir=work_dir,
+        timeout_per_step=timeout_per_step,
+    )
+
 # ── Search Spaces ────────────────────────────────────────────
 # (min, max, scale)  scale: 'log' = log-uniform, 'int' = uniform int
 
@@ -109,36 +126,6 @@ def run_single_algo(binary, dataset, algo, params, seed, work_dir, timeout=300):
         return data[0] if data else None
     except (subprocess.TimeoutExpired, json.JSONDecodeError, IndexError):
         return None
-
-
-def run_chain(binary, dataset, chain_steps, seed, work_dir, timeout_per_step=300):
-    """Run a chain of algorithms with warm-starting."""
-    os.makedirs(work_dir, exist_ok=True)
-    sln_path = None
-    final_result = None
-    for i, (algo, params) in enumerate(chain_steps):
-        step_dir = os.path.join(work_dir, f'step_{i}_{algo}')
-        os.makedirs(step_dir, exist_ok=True)
-        cmd = [binary, dataset, '--algo', algo, '--seed', str(seed),
-               '--output-dir', step_dir]
-        for k, v in params.items():
-            cmd.extend(['--' + k.replace('_', '-'), str(int(v))])
-        if sln_path and os.path.isfile(sln_path):
-            cmd.extend(['--init-solution', sln_path])
-        try:
-            r = subprocess.run(cmd, capture_output=True, text=True,
-                               timeout=timeout_per_step)
-            if r.returncode != 0:
-                return None
-            data = json.loads(r.stdout)
-            if not data:
-                return None
-            final_result = data[0]
-            sln_files = globmod.glob(os.path.join(step_dir, 'solutions', '*.sln'))
-            sln_path = sln_files[0] if sln_files else None
-        except (subprocess.TimeoutExpired, json.JSONDecodeError, IndexError):
-            return None
-    return final_result
 
 
 def eval_on_datasets(binary, datasets, algo, params, seed, work_dir,
@@ -1177,6 +1164,15 @@ class AutoTuner:
         )
         print(f"\n  [Params] Updated golden params (v{version}): {reason}")
         print(f"  [Params] Saved to tuned_params.json")
+
+        # Also persist the best chain alongside per-algo params
+        if self.best_chain and self.best_chain_score < (1e6 if self.multi else 1e9):
+            try:
+                from tooling.tuned_params import save_best_chain
+                save_best_chain(self.best_chain, self.best_chain_score)
+                print(f"  [Params] Saved best_chain ({len(self.best_chain)} steps) to tuned_params.json")
+            except Exception as e:
+                print(f"  [warn] failed to persist best_chain: {e}")
 
     # ── Main Entry ───────────────────────────────────────────
 
