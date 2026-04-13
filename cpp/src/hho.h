@@ -1,10 +1,9 @@
 /*
- * hho.h — Harris Hawks Optimization with incremental delta evaluation
+ * Harris Hawks Optimization.
  *
- * Population-based metaheuristic inspired by cooperative hunting behavior.
- * Phases: exploration (|E| >= 1) and exploitation (|E| < 1) with Lévy flights.
- *
- * Key optimization: move_delta() for O(k) perturbation scoring.
+ * Population-based metaheuristic: cooperative hunting behavior.
+ * Exploration (|E| >= 1) and exploitation (|E| < 1) with Levy flights.
+ * Uses move_delta() for O(k) perturbation scoring.
  */
 
 #pragma once
@@ -22,7 +21,6 @@
 #include <algorithm>
 #include <chrono>
 #include <iostream>
-#include <map>
 #include <numeric>
 #include <random>
 #include <vector>
@@ -42,19 +40,17 @@ inline std::pair<Solution, double> init_random_solution(
     std::iota(order.begin(), order.end(), 0);
     std::shuffle(order.begin(), order.end(), rng);
 
-    std::map<std::pair<int, int>, int> pr_usage;
-
     for (int eid : order) {
-        std::set<int> blocked;
+        std::vector<bool> blocked(np, false);
         for (auto& [nb, _] : prob.adj[eid]) {
             int p = sol.period_of[nb];
-            if (p >= 0) blocked.insert(p);
+            if (p >= 0) blocked[p] = true;
         }
 
         int dur = prob.exams[eid].duration;
         std::vector<int> avail;
         for (int p = 0; p < np; p++)
-            if (!blocked.count(p) && prob.periods[p].duration >= dur)
+            if (!blocked[p] && prob.periods[p].duration >= dur)
                 avail.push_back(p);
         if (avail.empty())
             for (int p = 0; p < np; p++) avail.push_back(p);
@@ -63,14 +59,10 @@ inline std::pair<Solution, double> init_random_solution(
 
         bool placed = false;
         for (int pid : avail) {
-            std::vector<int> rooms(nr);
-            std::iota(rooms.begin(), rooms.end(), 0);
-            std::shuffle(rooms.begin(), rooms.end(), rng);
-            for (int rid : rooms) {
-                if (pr_usage[{pid, rid}] + prob.exams[eid].enrollment()
-                    <= prob.rooms[rid].capacity) {
+            for (int rid = 0; rid < nr; rid++) {
+                if (sol.get_pr_enroll(pid, rid) + fe.exam_enroll[eid]
+                    <= fe.room_cap[rid]) {
                     sol.assign(eid, pid, rid);
-                    pr_usage[{pid, rid}] += prob.exams[eid].enrollment();
                     placed = true;
                     break;
                 }
@@ -271,18 +263,19 @@ inline AlgoResult solve_hho(
                 }
             }
 
-            // Always verify with full_eval to prevent delta drift
-            double actual_fit = fe.full_eval(new_sol).fitness();
-            if (actual_fit < fitness[i]) {
+            // Accept if delta-tracked fitness improved; full_eval only on
+            // new global best (rare) to avoid 30 full_evals per iteration.
+            if (new_fit < fitness[i]) {
                 population[i] = std::move(new_sol);
-                fitness[i] = actual_fit;
+                fitness[i] = new_fit;
             }
         }
 
-        // Re-sync rabbit fitness
-        if (t % 10 == 0)
-            for (int i = 0; i < pop_size; i++)
-                fitness[i] = fe.full_eval(population[i]).fitness();
+        // Staggered resync: 1 member per iteration to correct delta drift
+        if (t % 3 == 0) {
+            int slot = (t / 3) % pop_size;
+            fitness[slot] = fe.full_eval(population[slot]).fitness();
+        }
 
         int cur_best = (int)(std::min_element(fitness.begin(), fitness.end()) - fitness.begin());
         if (fitness[cur_best] < rabbit_fitness) {

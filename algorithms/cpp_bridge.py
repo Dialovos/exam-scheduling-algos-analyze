@@ -1,8 +1,6 @@
 """
-C++ Solver Bridge — calls the compiled C++ exam_solver binary via subprocess
-and returns results in the same format as the Python algorithms.
-
-Falls back to Python implementations if the binary is not found.
+Calls the compiled C++ exam_solver binary and returns results in the same
+format as the Python algorithms. Falls back to Python if the binary is missing.
 
 Quick usage (for notebooks):
     from algorithms.cpp_bridge import run_solver
@@ -32,8 +30,6 @@ def run_solver(
     tabu_iters: int = _GP.get('tabu_iters', 2000),
     tabu_tenure: int = _GP.get('tabu_tenure', 20),
     tabu_patience: int = _GP.get('tabu_patience', 500),
-    hho_pop: int = _GP.get('hho_pop', 30),
-    hho_iters: int = _GP.get('hho_iters', 200),
     sa_iters: int = _GP.get('sa_iters', 5000),
     kempe_iters: int = _GP.get('kempe_iters', 3000),
     alns_iters: int = _GP.get('alns_iters', 2000),
@@ -44,7 +40,11 @@ def run_solver(
     ga_iters: int = _GP.get('ga_iters', 500),
     lahc_iters: int = _GP.get('lahc_iters', 5000),
     lahc_list: int = _GP.get('lahc_list', 0),
-    ns_finalists: int = 3,
+    woa_pop: int = _GP.get('woa_pop', 25),
+    woa_iters: int = _GP.get('woa_iters', 3000),
+    cpsat_time: float = _GP.get('cpsat_time', 60.0),
+    vns_iters: int = _GP.get('vns_iters', 5000),
+    vns_budget: int = _GP.get('vns_budget', 0),
     seed: int = 42,
     limit: int = 0,
     output_dir: str = 'results',
@@ -60,7 +60,7 @@ def run_solver(
 
     Args:
         problem_or_path: either a filepath str or a ProblemInstance
-        algo: "greedy", "tabu", "hho", or "all"
+        algo: single name ("sa"), comma-separated ("sa,gd,tabu"), or "all"
         (remaining args): algorithm configuration
 
     Returns:
@@ -88,13 +88,14 @@ def run_solver(
     return run_cpp_solver(
         filepath, problem, algo=algo, limit=limit,
         tabu_iters=tabu_iters, tabu_tenure=tabu_tenure,
-        tabu_patience=tabu_patience, hho_pop=hho_pop,
-        hho_iters=hho_iters, sa_iters=sa_iters,
+        tabu_patience=tabu_patience, sa_iters=sa_iters,
         kempe_iters=kempe_iters, alns_iters=alns_iters,
         gd_iters=gd_iters, abc_pop=abc_pop,
         abc_iters=abc_iters, ga_pop=ga_pop,
         ga_iters=ga_iters, lahc_iters=lahc_iters,
-        lahc_list=lahc_list, ns_finalists=ns_finalists,
+        lahc_list=lahc_list, woa_pop=woa_pop,
+        woa_iters=woa_iters, cpsat_time=cpsat_time,
+        vns_iters=vns_iters, vns_budget=vns_budget,
         seed=seed, output_dir=output_dir, verbose=verbose,
     )
 
@@ -198,8 +199,6 @@ def _run_python_fallback(problem, algo='all',
                          tabu_iters=_GP.get('tabu_iters', 2000),
                          tabu_tenure=_GP.get('tabu_tenure', 20),
                          tabu_patience=_GP.get('tabu_patience', 500),
-                         hho_pop=_GP.get('hho_pop', 30),
-                         hho_iters=_GP.get('hho_iters', 200),
                          sa_iters=_GP.get('sa_iters', 5000),
                          kempe_iters=_GP.get('kempe_iters', 3000),
                          alns_iters=_GP.get('alns_iters', 2000),
@@ -208,21 +207,19 @@ def _run_python_fallback(problem, algo='all',
                          abc_iters=_GP.get('abc_iters', 3000),
                          ga_pop=_GP.get('ga_pop', 50),
                          ga_iters=_GP.get('ga_iters', 500),
-                         lahc_iters=_GP.get('lahc_iters', 5000),
-                         lahc_list=_GP.get('lahc_list', 0),
-                         ns_finalists=3,
-                         seed=42, verbose=True):
-    """Run Python implementations when C++ binary is unavailable."""
+                         seed=42, verbose=True, **_kwargs):
+    """Run Python implementations when C++ binary is unavailable.
+
+    Note: LAHC, WOA, CP-SAT, and GVNS are C++ only.
+    """
     from algorithms.greedy import solve_greedy
     from algorithms.tabu_search import solve_tabu
-    from algorithms.hho import solve_hho
     from algorithms.kempe_chain import solve_kempe
     from algorithms.simulated_annealing import solve_sa
     from algorithms.alns import solve_alns
     from algorithms.great_deluge import solve_great_deluge
     from algorithms.abc import solve_abc
     from algorithms.ga import solve_ga
-    from algorithms.natural_selection import solve_natural_selection
 
     results = {}
 
@@ -241,14 +238,6 @@ def _run_python_fallback(problem, algo='all',
                        seed=seed, verbose=verbose)
         r['evaluation'] = _py_to_eval(r['evaluation'])
         results['Tabu Search'] = r
-
-    if algo in ('all', 'hho'):
-        if verbose:
-            print(f"\n{'─'*50}\nHHO (Python, pop={hho_pop}, iters={hho_iters})...")
-        r = solve_hho(problem, population_size=hho_pop,
-                      max_iterations=hho_iters, seed=seed, verbose=verbose)
-        r['evaluation'] = _py_to_eval(r['evaluation'])
-        results['HHO'] = r
 
     if algo in ('all', 'kempe'):
         if verbose:
@@ -298,23 +287,10 @@ def _run_python_fallback(problem, algo='all',
         r['evaluation'] = _py_to_eval(r['evaluation'])
         results['Genetic Algorithm'] = r
 
-    if algo in ('all', 'lahc'):
+    cpp_only = {'lahc', 'woa', 'cpsat', 'vns'}
+    if algo in cpp_only or (algo == 'all' and verbose):
         if verbose:
-            print(f"\n{'─'*50}\nLAHC: no Python implementation, skipping (C++ only)")
-
-    if algo == 'ns':
-        if verbose:
-            print(f"\n{'─'*50}\nNatural Selection (Python, finalists={ns_finalists})...")
-        r = solve_natural_selection(problem, n_finalists=ns_finalists,
-                                    tabu_iters=tabu_iters, tabu_patience=tabu_patience,
-                                    hho_pop=hho_pop, hho_iters=hho_iters,
-                                    sa_iters=sa_iters, kempe_iters=kempe_iters,
-                                    alns_iters=alns_iters, gd_iters=gd_iters,
-                                    abc_pop=abc_pop, abc_iters=abc_iters,
-                                    ga_pop=ga_pop, ga_iters=ga_iters,
-                                    seed=seed, verbose=verbose)
-        r['evaluation'] = _py_to_eval(r['evaluation'])
-        results['Natural Selection'] = r
+            print(f"\n{'─'*50}\nNote: LAHC, WOA, CP-SAT, GVNS are C++ only (skipped in fallback)")
 
     return results
 
@@ -333,8 +309,6 @@ def run_cpp_solver(
     tabu_iters: int = _GP.get('tabu_iters', 2000),
     tabu_tenure: int = _GP.get('tabu_tenure', 20),
     tabu_patience: int = _GP.get('tabu_patience', 500),
-    hho_pop: int = _GP.get('hho_pop', 30),
-    hho_iters: int = _GP.get('hho_iters', 200),
     sa_iters: int = _GP.get('sa_iters', 5000),
     kempe_iters: int = _GP.get('kempe_iters', 3000),
     alns_iters: int = _GP.get('alns_iters', 2000),
@@ -345,7 +319,11 @@ def run_cpp_solver(
     ga_iters: int = _GP.get('ga_iters', 500),
     lahc_iters: int = _GP.get('lahc_iters', 5000),
     lahc_list: int = _GP.get('lahc_list', 0),
-    ns_finalists: int = 3,
+    woa_pop: int = _GP.get('woa_pop', 25),
+    woa_iters: int = _GP.get('woa_iters', 3000),
+    cpsat_time: float = _GP.get('cpsat_time', 60.0),
+    vns_iters: int = _GP.get('vns_iters', 5000),
+    vns_budget: int = _GP.get('vns_budget', 0),
     seed: int = 42,
     output_dir: str = 'results',
     verbose: bool = True,
@@ -364,12 +342,11 @@ def run_cpp_solver(
         return _run_python_fallback(
             problem, algo=algo,
             tabu_iters=tabu_iters, tabu_tenure=tabu_tenure,
-            tabu_patience=tabu_patience, hho_pop=hho_pop,
-            hho_iters=hho_iters, sa_iters=sa_iters,
+            tabu_patience=tabu_patience, sa_iters=sa_iters,
             kempe_iters=kempe_iters, alns_iters=alns_iters,
             gd_iters=gd_iters, abc_pop=abc_pop,
             abc_iters=abc_iters, ga_pop=ga_pop,
-            ga_iters=ga_iters, ns_finalists=ns_finalists,
+            ga_iters=ga_iters,
             seed=seed, verbose=verbose)
 
     os.makedirs(output_dir, exist_ok=True)
@@ -381,8 +358,6 @@ def run_cpp_solver(
         '--tabu-iters', str(tabu_iters),
         '--tabu-tenure', str(tabu_tenure),
         '--tabu-patience', str(tabu_patience),
-        '--hho-pop', str(hho_pop),
-        '--hho-iters', str(hho_iters),
         '--sa-iters', str(sa_iters),
         '--kempe-iters', str(kempe_iters),
         '--alns-iters', str(alns_iters),
@@ -393,7 +368,11 @@ def run_cpp_solver(
         '--ga-iters', str(ga_iters),
         '--lahc-iters', str(lahc_iters),
         '--lahc-list', str(lahc_list),
-        '--ns-finalists', str(ns_finalists),
+        '--woa-pop', str(woa_pop),
+        '--woa-iters', str(woa_iters),
+        '--cpsat-time', str(cpsat_time),
+        '--vns-iters', str(vns_iters),
+        '--vns-budget', str(vns_budget),
         '--seed', str(seed),
         '--output-dir', output_dir,
     ]
@@ -405,34 +384,66 @@ def run_cpp_solver(
     if verbose:
         print(f"[C++ Bridge] Running: {' '.join(cmd)}")
 
+    # Use Popen so we can poll /proc/<pid>/status for peak RSS (VmHWM).
+    import threading as _threading
     try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=600,  # 10-minute timeout
-        )
-    except subprocess.TimeoutExpired:
-        print("[C++ Bridge] Solver timed out after 600s")
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE, text=True)
+    except OSError as e:
+        print(f"[C++ Bridge] Failed to start solver: {e}")
         return None
 
+    peak_kb = [0]
+    stop_poll = _threading.Event()
+
+    def _poll(pid=proc.pid):
+        while not stop_poll.is_set():
+            try:
+                with open(f'/proc/{pid}/status') as f:
+                    for line in f:
+                        if line.startswith('VmHWM:'):
+                            kb = int(line.split()[1])
+                            if kb > peak_kb[0]:
+                                peak_kb[0] = kb
+                            break
+            except (OSError, ValueError):
+                return
+            time.sleep(0.05)
+
+    poller = _threading.Thread(target=_poll, daemon=True)
+    poller.start()
+
+    try:
+        stdout_data, stderr_data = proc.communicate(timeout=600)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.communicate()
+        stop_poll.set()
+        print("[C++ Bridge] Solver timed out after 600s")
+        return None
+    finally:
+        stop_poll.set()
+        poller.join(timeout=0.2)
+
+    memory_peak_mb = peak_kb[0] / 1024.0
+
     # Print stderr (verbose logs) to console
-    if result.stderr and verbose:
-        for line in result.stderr.strip().split('\n'):
+    if stderr_data and verbose:
+        for line in stderr_data.strip().split('\n'):
             print(f"  {line}")
 
-    if result.returncode != 0:
-        print(f"[C++ Bridge] Solver failed (code {result.returncode})")
-        if result.stderr:
-            print(result.stderr)
+    if proc.returncode != 0:
+        print(f"[C++ Bridge] Solver failed (code {proc.returncode})")
+        if stderr_data:
+            print(stderr_data)
         return None
 
     # Parse JSON from stdout
     try:
-        raw_results = json.loads(result.stdout)
+        raw_results = json.loads(stdout_data)
     except json.JSONDecodeError as e:
         print(f"[C++ Bridge] JSON parse error: {e}")
-        print(f"[C++ Bridge] stdout was: {result.stdout[:500]}")
+        print(f"[C++ Bridge] stdout was: {stdout_data[:500]}")
         return None
 
     # Convert to the same format as Python algorithms
@@ -453,6 +464,7 @@ def run_cpp_solver(
             'evaluation': ev,
             'algorithm': name,
             'iterations': r.get('iterations', 0),
+            'memory_peak_mb': round(memory_peak_mb, 2),
         }
 
     return algo_results

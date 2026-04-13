@@ -1,5 +1,5 @@
 """
-OPTIMIZATION
+Cache-friendly evaluator with precomputed flat arrays and O(k) delta moves.
 """
 
 from __future__ import annotations

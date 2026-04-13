@@ -1,16 +1,9 @@
 /*
- * main.cpp — Entry point for the C++ exam solver
- *
  * Compile:  g++ -O3 -std=c++20 -o exam_solver main.cpp
  * Usage:    ./exam_solver <file.exam> [options]
  *
- * All algorithm logic lives in the header files:
- *   models.h     — data structures
- *   parser.h     — .exam file parser
- *   evaluator.h  — full + delta evaluation
- *   greedy.h     — greedy heuristic
- *   tabu.h       — tabu search
- *   hho.h        — Harris Hawks Optimization
+ * Parses CLI args, runs selected algorithms, writes JSON results to stdout
+ * and .sln files to output-dir/solutions/.
  */
 
 #include "models.h"
@@ -18,7 +11,6 @@
 #include "evaluator.h"
 #include "greedy.h"
 #include "tabu.h"
-#include "hho.h"
 #include "kempe.h"
 #include "sa.h"
 #include "alns.h"
@@ -26,12 +18,17 @@
 #include "abc.h"
 #include "ga.h"
 #include "lahc.h"
-#include "natural_selection.h"
+#include "woa.h"
+#include "cpsat.h"
+#include "vns.h"
+#include "feasibility.h"
 
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <set>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -82,8 +79,7 @@ int main(int argc, char* argv[]) {
     int tabu_iters      = 200;
     int tabu_tenure     = 15;
     int tabu_patience   = 50;
-    int hho_pop         = 30;
-    int hho_iters       = 100;
+    // HHO archived — replaced by WOA (pending)
     int sa_iters        = 5000;
     int kempe_iters     = 3000;
     int alns_iters      = 2000;
@@ -94,7 +90,11 @@ int main(int argc, char* argv[]) {
     int ga_iters        = 500;
     int lahc_iters      = 5000;
     int lahc_list       = 0;
-    int ns_finalists    = 3;
+    int woa_pop         = 25;
+    int woa_iters       = 3000;
+    double cpsat_time   = 60.0;
+    int vns_iters       = 5000;
+    int vns_budget      = 0;
     int seed            = 42;
     string output_dir   = "results";
     string init_solution_path;
@@ -107,8 +107,7 @@ int main(int argc, char* argv[]) {
         else if (arg == "--tabu-iters"     && i+1 < argc) tabu_iters    = stoi(argv[++i]);
         else if (arg == "--tabu-tenure"    && i+1 < argc) tabu_tenure   = stoi(argv[++i]);
         else if (arg == "--tabu-patience"  && i+1 < argc) tabu_patience = stoi(argv[++i]);
-        else if (arg == "--hho-pop"        && i+1 < argc) hho_pop       = stoi(argv[++i]);
-        else if (arg == "--hho-iters"      && i+1 < argc) hho_iters     = stoi(argv[++i]);
+        // HHO args removed (archived)
         else if (arg == "--sa-iters"       && i+1 < argc) sa_iters      = stoi(argv[++i]);
         else if (arg == "--kempe-iters"    && i+1 < argc) kempe_iters   = stoi(argv[++i]);
         else if (arg == "--alns-iters"     && i+1 < argc) alns_iters    = stoi(argv[++i]);
@@ -119,7 +118,11 @@ int main(int argc, char* argv[]) {
         else if (arg == "--ga-iters"       && i+1 < argc) ga_iters      = stoi(argv[++i]);
         else if (arg == "--lahc-iters"     && i+1 < argc) lahc_iters    = stoi(argv[++i]);
         else if (arg == "--lahc-list"      && i+1 < argc) lahc_list     = stoi(argv[++i]);
-        else if (arg == "--ns-finalists"   && i+1 < argc) ns_finalists  = stoi(argv[++i]);
+        else if (arg == "--woa-pop"       && i+1 < argc) woa_pop       = stoi(argv[++i]);
+        else if (arg == "--woa-iters"     && i+1 < argc) woa_iters     = stoi(argv[++i]);
+        else if (arg == "--cpsat-time"    && i+1 < argc) cpsat_time    = stod(argv[++i]);
+        else if (arg == "--vns-iters"    && i+1 < argc) vns_iters     = stoi(argv[++i]);
+        else if (arg == "--vns-budget"   && i+1 < argc) vns_budget    = stoi(argv[++i]);
         else if (arg == "--seed"           && i+1 < argc) seed          = stoi(argv[++i]);
         else if (arg == "--output-dir"     && i+1 < argc) output_dir    = argv[++i];
         else if (arg == "--init-solution"  && i+1 < argc) init_solution_path = argv[++i];
@@ -130,13 +133,12 @@ int main(int argc, char* argv[]) {
     if (filepath.empty()) {
         cerr << "Usage: exam_solver <file.exam> [options]\n"
              << "\nOptions:\n"
-             << "  --algo greedy|tabu|hho|kempe|sa|alns|gd|abc|ga|lahc|ns|all  Algorithm (default: all)\n"
+             << "  --algo ALGO[,ALGO,...]       Algorithm(s): greedy,feasibility,tabu,kempe,sa,alns,gd,abc,ga,lahc,woa,cpsat,vns,all (default: all)\n"
              << "  --limit N                    Load only first N exams (0=all)\n"
              << "  --tabu-iters N               Tabu max iterations (default: 200)\n"
              << "  --tabu-tenure N              Tabu tenure (default: 15)\n"
              << "  --tabu-patience N            Tabu patience (default: 50)\n"
-             << "  --hho-pop N                  HHO population size (default: 30)\n"
-             << "  --hho-iters N                HHO max iterations (default: 100)\n"
+             // HHO help removed
              << "  --sa-iters N                 SA iterations (default: 5000)\n"
              << "  --kempe-iters N              Kempe Chain iterations (default: 3000)\n"
              << "  --alns-iters N               ALNS iterations (default: 2000)\n"
@@ -147,7 +149,11 @@ int main(int argc, char* argv[]) {
              << "  --ga-iters N                 GA generations (default: 500)\n"
              << "  --lahc-iters N               LAHC iterations (default: 5000)\n"
              << "  --lahc-list N                LAHC list length (0=auto) (default: 0)\n"
-             << "  --ns-finalists N             Natural Selection finalists (default: 3)\n"
+             << "  --woa-pop N                  WOA population size (default: 25)\n"
+             << "  --woa-iters N                WOA iterations (default: 3000)\n"
+             << "  --cpsat-time SEC             CP-SAT time limit in seconds (default: 60)\n"
+             << "  --vns-iters N                VNS iterations (default: 5000)\n"
+             << "  --vns-budget N               VNS scan budget per VND level (0=auto)\n"
              << "  --seed N                     Random seed (default: 42)\n"
              << "  --output-dir DIR             Output directory (default: results)\n"
              << "  --init-solution PATH         Warm-start from .sln file\n"
@@ -189,80 +195,110 @@ int main(int argc, char* argv[]) {
         if (verbose) cerr << "Loaded init solution from " << init_solution_path << endl;
     }
 
+    // ── Parse algo string into a set (supports "all", "sa", "sa,gd,tabu", etc.) ──
+    set<string> algos;
+    {
+        istringstream ss(algo);
+        string token;
+        while (getline(ss, token, ','))
+            if (!token.empty()) algos.insert(token);
+    }
+    bool run_all = algos.count("all") > 0;
+    auto want = [&](const string& a) { return run_all || algos.count(a) > 0; };
+
     // ── Run algorithms ──
     vector<AlgoResult> results;
     string ne_str = to_string(prob.n_e());
     string sln_dir = output_dir + "/solutions";
     filesystem::create_directories(sln_dir);
 
-    // When running all algos, compute greedy once and share as init solution
+    // When running multiple algos, compute greedy once and share as init solution
     // instead of each algorithm rebuilding it independently.
     const Solution* shared_init = init_sol_ptr;
     AlgoResult greedy_result;
-    if (algo == "all") {
+    if (algos.size() > 1 || run_all || want("greedy")) {
         greedy_result = solve_greedy(prob, verbose);
         write_solution_file(greedy_result.sol, sln_dir + "/solution_greedy_" + ne_str + ".sln");
-        results.push_back(greedy_result);
+        if (want("greedy"))
+            results.push_back(greedy_result);
         if (!init_sol_ptr)
             shared_init = &greedy_result.sol;
-    } else if (algo == "greedy") {
-        greedy_result = solve_greedy(prob, verbose);
-        write_solution_file(greedy_result.sol, sln_dir + "/solution_greedy_" + ne_str + ".sln");
-        results.push_back(move(greedy_result));
     }
-    if (algo == "all" || algo == "tabu") {
+    // ── Feasibility pre-processor: when greedy is infeasible, run targeted
+    //    feasibility solver and use its output as shared_init for all algorithms.
+    AlgoResult feasibility_result;
+    if (shared_init && !shared_init->period_of.empty()) {
+        FastEvaluator fe_check(prob);
+        int greedy_hard = fe_check.count_hard_fast(*shared_init);
+        if (greedy_hard > 0) {
+            if (verbose)
+                cerr << "Greedy infeasible (hard=" << greedy_hard
+                     << "), running feasibility solver...\n";
+            feasibility_result = solve_feasibility(prob, seed, verbose, shared_init);
+            write_solution_file(feasibility_result.sol,
+                                sln_dir + "/solution_feasibility_" + ne_str + ".sln");
+            if (want("feasibility"))
+                results.push_back(feasibility_result);
+            // Use feasibility output as shared init for all subsequent algorithms
+            if (feasibility_result.eval.hard() < greedy_hard)
+                shared_init = &feasibility_result.sol;
+        }
+    }
+
+    if (want("tabu")) {
         auto r = solve_tabu(prob, tabu_iters, tabu_tenure, tabu_patience, seed, verbose, shared_init);
         write_solution_file(r.sol, sln_dir + "/solution_tabu_search_" + ne_str + ".sln");
         results.push_back(move(r));
     }
-    if (algo == "all" || algo == "hho") {
-        auto r = solve_hho(prob, hho_pop, hho_iters, seed, verbose, shared_init);
-        write_solution_file(r.sol, sln_dir + "/solution_hho_" + ne_str + ".sln");
-        results.push_back(move(r));
-    }
-    if (algo == "all" || algo == "kempe") {
+    // HHO block removed (archived to cpp/src/archive/hho.h)
+    if (want("kempe")) {
         auto r = solve_kempe(prob, kempe_iters, seed, verbose, shared_init);
         write_solution_file(r.sol, sln_dir + "/solution_kempe_chain_" + ne_str + ".sln");
         results.push_back(move(r));
     }
-    if (algo == "all" || algo == "sa") {
+    if (want("sa")) {
         auto r = solve_sa(prob, sa_iters, 0.0, 0.9995, seed, verbose, shared_init);
         write_solution_file(r.sol, sln_dir + "/solution_simulated_annealing_" + ne_str + ".sln");
         results.push_back(move(r));
     }
-    if (algo == "all" || algo == "alns") {
+    if (want("alns")) {
         auto r = solve_alns(prob, alns_iters, 0.15, seed, verbose, shared_init);
         write_solution_file(r.sol, sln_dir + "/solution_alns_" + ne_str + ".sln");
         results.push_back(move(r));
     }
-    if (algo == "all" || algo == "gd") {
+    if (want("gd")) {
         auto r = solve_great_deluge(prob, gd_iters, 0.0, seed, verbose, shared_init);
         write_solution_file(r.sol, sln_dir + "/solution_great_deluge_" + ne_str + ".sln");
         results.push_back(move(r));
     }
-    if (algo == "all" || algo == "abc") {
+    if (want("abc")) {
         auto r = solve_abc(prob, abc_pop, abc_iters, 0, seed, verbose, shared_init);
         write_solution_file(r.sol, sln_dir + "/solution_abc_" + ne_str + ".sln");
         results.push_back(move(r));
     }
-    if (algo == "all" || algo == "ga") {
+    if (want("ga")) {
         auto r = solve_ga(prob, ga_pop, ga_iters, 0.8, 0.15, seed, verbose, shared_init);
         write_solution_file(r.sol, sln_dir + "/solution_genetic_algorithm_" + ne_str + ".sln");
         results.push_back(move(r));
     }
-    if (algo == "all" || algo == "lahc") {
+    if (want("lahc")) {
         auto r = solve_lahc(prob, lahc_iters, lahc_list, seed, verbose, shared_init);
         write_solution_file(r.sol, sln_dir + "/solution_lahc_" + ne_str + ".sln");
         results.push_back(move(r));
     }
-    if (algo == "ns") {
-        auto r = solve_natural_selection(prob, ns_finalists,
-            tabu_iters, tabu_tenure, tabu_patience,
-            hho_pop, hho_iters, sa_iters, kempe_iters,
-            alns_iters, gd_iters, abc_pop, abc_iters,
-            ga_pop, ga_iters, lahc_iters, lahc_list,
-            seed, verbose);
-        write_solution_file(r.sol, sln_dir + "/solution_natural_selection_" + ne_str + ".sln");
+    if (want("woa")) {
+        auto r = solve_woa(prob, woa_pop, woa_iters, seed, verbose, shared_init);
+        write_solution_file(r.sol, sln_dir + "/solution_woa_" + ne_str + ".sln");
+        results.push_back(move(r));
+    }
+    if (want("cpsat")) {
+        auto r = solve_cpsat(prob, cpsat_time, seed, verbose, shared_init);
+        write_solution_file(r.sol, sln_dir + "/solution_cpsat_" + ne_str + ".sln");
+        results.push_back(move(r));
+    }
+    if (want("vns")) {
+        auto r = solve_vns(prob, vns_iters, vns_budget, seed, verbose, shared_init);
+        write_solution_file(r.sol, sln_dir + "/solution_vns_" + ne_str + ".sln");
         results.push_back(move(r));
     }
 

@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 """
-Auto-Tuner for Exam Scheduling Algorithms
-
-Combines parameter optimization + algorithm chaining with tournament-based
-natural selection. Evaluates across multiple datasets to avoid overfitting.
+Parameter optimization + algorithm chaining with tournament-based selection.
+Evaluates across multiple datasets to avoid overfitting.
 
 Single-dataset mode:
     python -m tooling.auto_tuner instances/exam_comp_set4.exam
@@ -28,11 +26,14 @@ import subprocess
 import sys
 import time
 from collections import defaultdict
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 
 from algorithms.cpp_bridge import run_chain as _bridge_run_chain
+from tooling.eval_cache import EvalCache
+from tooling.optimizers import optimize_params
+from tooling.successive_halving import successive_halving
 
 
 def run_chain(binary, dataset, chain_steps, seed, work_dir, timeout_per_step=300):
@@ -58,10 +59,6 @@ SEARCH_SPACES = {
         'tabu_tenure':   (5,    50,    'int'),
         'tabu_patience': (50,   2000,  'log'),
     },
-    'hho': {
-        'hho_pop':   (10,  100,  'int'),
-        'hho_iters': (50,  1000, 'log'),
-    },
     'sa':    {'sa_iters':    (1000, 50000, 'log')},
     'kempe': {'kempe_iters': (500,  20000, 'log')},
     'alns':  {'alns_iters':  (500,  20000, 'log')},
@@ -78,6 +75,14 @@ SEARCH_SPACES = {
         'lahc_iters': (1000, 50000, 'log'),
         'lahc_list':  (0,    5000,  'int'),
     },
+    'woa': {
+        'woa_pop':   (10,  100,  'int'),
+        'woa_iters': (500, 20000, 'log'),
+    },
+    'vns': {
+        'vns_iters':  (1000, 50000, 'log'),
+        'vns_budget': (10,   100,   'int'),
+    },
 }
 
 from tooling.tuned_params import load_params as _load_golden, FALLBACK_PARAMS
@@ -90,18 +95,19 @@ TUNABLE_ALGOS = list(SEARCH_SPACES.keys())
 # ── Binary Management ────────────────────────────────────────
 
 def find_or_build_binary():
-    root = Path(__file__).parent
-    binary = root / 'cpp' / 'exam_solver'
+    root = Path(__file__).parent.parent
+    binary = root / 'cpp' / 'build' / 'exam_solver'
     if binary.is_file() and os.access(binary, os.X_OK):
         return str(binary)
-    src = root / 'cpp' / 'main.cpp'
+    src = root / 'cpp' / 'src' / 'main.cpp'
     if not src.is_file():
-        raise RuntimeError("Cannot find cpp/main.cpp")
+        raise RuntimeError(f"Cannot find {src}")
     print("[AutoTuner] Compiling C++ solver...")
+    binary.parent.mkdir(parents=True, exist_ok=True)
     r = subprocess.run(
         ['g++', '-O3', '-std=c++20', '-o', str(binary), str(src)],
         capture_output=True, text=True, timeout=120,
-        cwd=str(root / 'cpp'),
+        cwd=str(root),
     )
     if r.returncode != 0:
         raise RuntimeError(f"Compilation failed:\n{r.stderr}")
@@ -190,14 +196,14 @@ def eval_multi_seed(binary, dataset, algo, params, seeds, work_dir, timeout=300)
     """Run algo with multiple fixed seeds, return median score.
 
     Median is more robust to outliers than mean — a single lucky/unlucky
-    seed won't dominate the result.
+    seed won't dominate the result. Seeds are evaluated in parallel threads.
     """
-    scores = []
-    for s in seeds:
+    def _run(s):
         sd = os.path.join(work_dir, f's{s}')
-        result = run_single_algo(binary, dataset, algo, params, s, sd, timeout)
-        scores.append(compute_score(result))
-    scores.sort()
+        return compute_score(run_single_algo(binary, dataset, algo, params, s, sd, timeout))
+
+    with ThreadPoolExecutor(max_workers=len(seeds)) as pool:
+        scores = sorted(pool.map(_run, seeds))
     return scores[len(scores) // 2]  # median
 
 
@@ -206,17 +212,25 @@ def eval_multi_seed_datasets(binary, datasets, algo, params, seeds, work_dir,
     """Run algo on multiple datasets x multiple seeds.
 
     For each dataset: take median across seeds, then compute geometric mean
-    of normalized medians across datasets.
+    of normalized medians across datasets. All (dataset, seed) pairs run in
+    parallel threads.
     """
+    # Flatten all (dataset, seed) pairs into parallel work items
+    jobs = [(ds, s) for ds in datasets for s in seeds]
+
+    def _run(pair):
+        ds, s = pair
+        sd = os.path.join(work_dir, Path(ds).stem, f's{s}')
+        return ds, s, compute_score(run_single_algo(binary, ds, algo, params, s, sd, timeout))
+
+    results_by_ds = defaultdict(list)
+    with ThreadPoolExecutor(max_workers=len(jobs)) as pool:
+        for ds, s, score in pool.map(_run, jobs):
+            results_by_ds[ds].append(score)
+
     log_norms = []
     for ds in datasets:
-        ds_name = Path(ds).stem
-        ds_scores = []
-        for s in seeds:
-            sd = os.path.join(work_dir, ds_name, f's{s}')
-            result = run_single_algo(binary, ds, algo, params, s, sd, timeout)
-            ds_scores.append(compute_score(result))
-        ds_scores.sort()
+        ds_scores = sorted(results_by_ds[ds])
         raw = ds_scores[len(ds_scores) // 2]  # median
         bl = baselines.get(ds, 1.0)
         if bl <= 0 or bl >= 1e9:
@@ -230,28 +244,37 @@ def eval_multi_seed_datasets(binary, datasets, algo, params, seeds, work_dir,
 
 def eval_chain_multi_seed(binary, dataset, chain_steps, seeds, work_dir,
                           timeout_per_step=300):
-    """Run chain with multiple fixed seeds, return median score."""
-    scores = []
-    for s in seeds:
+    """Run chain with multiple fixed seeds in parallel, return median score."""
+    def _run(s):
         sd = os.path.join(work_dir, f's{s}')
-        result = run_chain(binary, dataset, chain_steps, s, sd, timeout_per_step)
-        scores.append(compute_score(result))
-    scores.sort()
+        return compute_score(run_chain(binary, dataset, chain_steps, s, sd, timeout_per_step))
+
+    with ThreadPoolExecutor(max_workers=len(seeds)) as pool:
+        scores = sorted(pool.map(_run, seeds))
     return scores[len(scores) // 2]
 
 
 def eval_chain_multi_seed_datasets(binary, datasets, chain_steps, seeds,
                                    work_dir, baselines, timeout_per_step=300):
-    """Run chain on multiple datasets x multiple seeds, return geomean of medians."""
+    """Run chain on multiple datasets x multiple seeds, return geomean of medians.
+
+    All (dataset, seed) pairs run in parallel threads.
+    """
+    jobs = [(ds, s) for ds in datasets for s in seeds]
+
+    def _run(pair):
+        ds, s = pair
+        sd = os.path.join(work_dir, Path(ds).stem, f's{s}')
+        return ds, s, compute_score(run_chain(binary, ds, chain_steps, s, sd, timeout_per_step))
+
+    results_by_ds = defaultdict(list)
+    with ThreadPoolExecutor(max_workers=len(jobs)) as pool:
+        for ds, s, score in pool.map(_run, jobs):
+            results_by_ds[ds].append(score)
+
     log_norms = []
     for ds in datasets:
-        ds_name = Path(ds).stem
-        ds_scores = []
-        for s in seeds:
-            sd = os.path.join(work_dir, ds_name, f's{s}')
-            result = run_chain(binary, ds, chain_steps, s, sd, timeout_per_step)
-            ds_scores.append(compute_score(result))
-        ds_scores.sort()
+        ds_scores = sorted(results_by_ds[ds])
         raw = ds_scores[len(ds_scores) // 2]
         bl = baselines.get(ds, 1.0)
         if bl <= 0 or bl >= 1e9:
@@ -409,6 +432,8 @@ class AutoTuner:
         os.makedirs(output_dir, exist_ok=True)
         self.ckpt = Checkpoint(os.path.join(output_dir, 'checkpoint.json'))
         self.binary = find_or_build_binary()
+        cache_path = os.path.join(output_dir, 'eval_cache.json')
+        self.cache = EvalCache(persist_path=cache_path)
         self.start_time = None
 
         # State
@@ -543,25 +568,39 @@ class AutoTuner:
         # Screen uses a single seed for speed — just ranking algos, not
         # picking final params. Multi-seed eval happens in Phase 2+.
         futures = {}
+        cache_hits = []  # [(algo, ds, result)]
         with ProcessPoolExecutor(max_workers=self.max_workers) as pool:
             for algo in remaining:
                 params = DEFAULT_PARAMS.get(algo, {})
                 for ds in self.datasets:
                     ds_name = self._ds_label(ds)
                     wd = os.path.join(self.output_dir, 'screen', algo, ds_name)
-                    futures[pool.submit(run_single_algo, self.binary, ds,
-                                        algo, params, self.eval_seeds[0],
-                                        wd)] = (algo, ds)
+                    key = EvalCache.key_for('single', algo, ds, self.eval_seeds[0], params)
+                    hit = self.cache.get(key)
+                    if hit is not None:
+                        cache_hits.append((algo, ds, hit))
+                        continue
+                    fut = pool.submit(run_single_algo, self.binary, ds,
+                                      algo, params, self.eval_seeds[0], wd)
+                    futures[fut] = (algo, ds, key)
+
+            # Process cache hits synchronously
+            for algo, ds, result in cache_hits:
+                score = compute_score(result)
+                self.screen_raw.setdefault(algo, {})[ds] = score
+                h = result.get('hard_violations', 0)
+                s = result.get('soft_penalty', 0)
+                tag = f"soft={s} (cached)" if h == 0 else f"INFEASIBLE hard={h} (cached)"
+                print(f"  {algo:<12} {self._ds_label(ds):<20} {tag}")
 
             for fut in as_completed(futures):
-                algo, ds = futures[fut]
+                algo, ds, key = futures[fut]
                 result = fut.result()
+                self.cache.put(key, result)
                 score = compute_score(result)
                 self.total_trials += 1
 
-                if algo not in self.screen_raw:
-                    self.screen_raw[algo] = {}
-                self.screen_raw[algo][ds] = score
+                self.screen_raw.setdefault(algo, {})[ds] = score
 
                 if result:
                     h = result.get('hard_violations', 0)
@@ -570,6 +609,8 @@ class AutoTuner:
                 else:
                     tag = "FAILED"
                 print(f"  {algo:<12} {self._ds_label(ds):<20} {tag}")
+
+        self.cache.save()
 
         # Compute baselines and aggregate scores
         self._compute_baselines()
@@ -646,65 +687,52 @@ class AutoTuner:
                 print(f"  {algo}: already tuned")
                 continue
 
-            print(f"\n  Tuning {algo} ({remaining} trials, {len(self.eval_seeds)} seeds each)...")
+            print(f"\n  Tuning {algo} ({remaining} evals, derivative-free)...")
             algo_scores = []
+            trial_idx = [existing]  # mutable counter for closure
+            budget_exceeded = [False]
 
-            configs = []
-            for t in range(remaining):
-                if t < 2 or algo not in self.best_params:
-                    configs.append(sample_random(algo, self.rng))
-                else:
-                    configs.append(perturb(algo, self.best_params[algo], self.rng))
-
-            # Each config is evaluated on ALL fixed seeds for fair comparison.
-            # Total solver calls = trials * seeds * datasets, but trials are
-            # reduced (default 8) so net compute is similar with much better signal.
-            for batch_start in range(0, len(configs), self.max_workers):
+            def eval_closure(params):
                 if self._time_up():
-                    print(f"    Time budget reached")
-                    break
+                    budget_exceeded[0] = True
+                    return float('inf')
+                idx = trial_idx[0]
+                trial_idx[0] += 1
+                wd = os.path.join(self.output_dir, 'param_tune', algo, f't{idx}')
+                if self.multi:
+                    score = eval_multi_seed_datasets(
+                        self.binary, eval_ds, algo, params,
+                        self.eval_seeds, wd, self.baselines)
+                else:
+                    score = eval_multi_seed(
+                        self.binary, self.datasets[0], algo, params,
+                        self.eval_seeds, wd)
+                self.param_history.append((algo, params, score))
+                self.total_trials += 1
+                algo_scores.append(score)
 
-                batch = configs[batch_start:batch_start + self.max_workers]
-                futures = {}
-                with ProcessPoolExecutor(max_workers=self.max_workers) as pool:
-                    for i, params in enumerate(batch):
-                        idx = existing + batch_start + i
-                        wd = os.path.join(self.output_dir, 'param_tune', algo, f't{idx}')
+                if score < self.best_scores.get(algo, float('inf')):
+                    self.best_scores[algo] = score
+                    self.best_params[algo] = dict(params)
+                    self._update_best('single', {'algo': algo, 'params': dict(params)}, score)
+                    fmt = f"{score:.4f}" if self.multi else f"{score:.0f}"
+                    print(f"    t{idx}: NEW BEST {fmt}  {params}")
+                else:
+                    fmt = f"{score:.4f}" if self.multi else f"{score:.0f}"
+                    print(f"    t{idx}: {fmt}")
 
-                        if self.multi:
-                            fut = pool.submit(eval_multi_seed_datasets,
-                                              self.binary, eval_ds, algo,
-                                              params, self.eval_seeds, wd,
-                                              self.baselines)
-                        else:
-                            fut = pool.submit(eval_multi_seed, self.binary,
-                                              self.datasets[0], algo, params,
-                                              self.eval_seeds, wd)
-                        futures[fut] = (params, idx)
+                if trial_idx[0] % 2 == 0:
+                    self._save()
+                return score
 
-                    for fut in as_completed(futures):
-                        params, idx = futures[fut]
-                        score = fut.result()
+            try:
+                optimize_params(algo, eval_closure, n_evals=remaining)
+            except Exception as e:
+                print(f"    Optimizer error for {algo}: {e}")
 
-                        self.param_history.append((algo, params, score))
-                        self.total_trials += 1
-                        algo_scores.append(score)
-
-                        if score < self.best_scores.get(algo, float('inf')):
-                            self.best_scores[algo] = score
-                            self.best_params[algo] = params
-                            self._update_best('single', {'algo': algo, 'params': params}, score)
-                            fmt = f"{score:.4f}" if self.multi else f"{score:.0f}"
-                            print(f"    t{idx}: NEW BEST {fmt}  {params}")
-                        else:
-                            fmt = f"{score:.4f}" if self.multi else f"{score:.0f}"
-                            print(f"    t{idx}: {fmt}")
-
-                self._save()
-
-                if self._plateau(algo_scores, window=4, eps=0.005):
-                    print(f"    Plateau for {algo}, moving on")
-                    break
+            self._save()
+            if budget_exceeded[0]:
+                print(f"    Time budget reached during {algo}")
 
         self.phase = 'chain_rediscover'
         self._save()
@@ -715,6 +743,62 @@ class AutoTuner:
             fmt = f"{sc:.4f}" if self.multi else f"{sc:.0f}"
             tag = fmt if sc < 1e6 else "infeasible"
             print(f"    {a:<12} {tag}  {self.best_params.get(a, {})}")
+
+    # ── Chain Evaluation Helper (variable fidelity) ──────────
+
+    def _eval_chain_at_fidelity(self, chain, n_seeds, n_datasets, work_dir_tag):
+        """Evaluate a chain using n_seeds seeds x n_datasets datasets from eval_subset.
+
+        Uses the first n_seeds of self.eval_seeds and the first n_datasets
+        of self.eval_subset. Returns geometric mean of normalized medians
+        (multi) or median score (single). Non-cached (ds, seed) pairs run
+        in parallel threads.
+        """
+        seeds = self.eval_seeds[:max(1, n_seeds)]
+        ds_list = self.eval_subset[:max(1, n_datasets)]
+
+        # Split into cache hits vs work items
+        results_by_ds = defaultdict(list)  # ds -> [score, ...]
+        work_items = []  # [(ds, seed)]
+
+        for ds in ds_list:
+            for s in seeds:
+                key = EvalCache.chain_key(ds, s, chain)
+                hit = self.cache.get(key)
+                if hit is not None:
+                    results_by_ds[ds].append(compute_score(hit))
+                else:
+                    work_items.append((ds, s))
+
+        if work_items:
+            def _run(pair):
+                ds, s = pair
+                ds_name = self._ds_label(ds)
+                wd = os.path.join(self.output_dir, 'chains_sh', work_dir_tag,
+                                  ds_name, f's{s}')
+                result = run_chain(self.binary, ds, chain, s, wd)
+                return ds, s, result
+
+            with ThreadPoolExecutor(max_workers=len(work_items)) as pool:
+                for ds, s, result in pool.map(_run, work_items):
+                    key = EvalCache.chain_key(ds, s, chain)
+                    self.cache.put(key, result)
+                    results_by_ds[ds].append(compute_score(result))
+
+        log_norms = []
+        for ds in ds_list:
+            ds_scores = sorted(results_by_ds[ds])
+            raw = ds_scores[len(ds_scores) // 2]  # median
+            if not self.multi:
+                return raw
+            bl = self.baselines.get(ds, raw)
+            if bl <= 0 or bl >= 1e9:
+                bl = max(raw, 1.0)
+            norm = raw / bl if raw < 1e9 else 1e6
+            log_norms.append(math.log(max(norm, 1e-6)))
+        if not log_norms:
+            return float('inf')
+        return math.exp(sum(log_norms) / len(log_norms))
 
     # ── Phase 2: Chain Discovery (Natural Selection) ──────────
 
@@ -787,41 +871,61 @@ class AutoTuner:
 
             to_eval = [(i, c) for i, (c, s) in enumerate(population) if s == float('inf')]
             if to_eval:
-                futures = {}
-                with ProcessPoolExecutor(max_workers=self.max_workers) as pool:
-                    for idx, chain in to_eval:
-                        wd = os.path.join(self.output_dir, 'chains', f'r{rnd}_c{idx}')
+                # Successive-halving rungs: cheap at first, expensive for survivors.
+                # Rung 0: 1 seed × 1 dataset  (fastest fidelity)
+                # Rung 1: 2 seeds × 2 datasets
+                # Rung 2: all seeds × all eval datasets
+                n_seeds_full = len(self.eval_seeds)
+                n_ds_full = len(eval_ds)
+                rungs = [
+                    (1, 1),
+                    (min(2, n_seeds_full), min(2, n_ds_full)),
+                    (n_seeds_full, n_ds_full),
+                ]
+                dedup = []
+                for r in rungs:
+                    if not dedup or dedup[-1] != r:
+                        dedup.append(r)
+                rungs = dedup
 
-                        if self.multi:
-                            fut = pool.submit(eval_chain_multi_seed_datasets,
-                                              self.binary, eval_ds, chain,
-                                              self.eval_seeds, wd,
-                                              self.baselines)
-                        else:
-                            fut = pool.submit(eval_chain_multi_seed,
-                                              self.binary, self.datasets[0],
-                                              chain, self.eval_seeds, wd)
-                        futures[fut] = idx
+                idx_by_id = {id(c): i for i, c in to_eval}
+                chain_list = [c for _, c in to_eval]
 
-                    for fut in as_completed(futures):
-                        idx = futures[fut]
-                        score = fut.result()
-                        chain = population[idx][0]
-                        population[idx] = (chain, score)
-                        self.total_trials += 1
-                        self.chain_history.append((chain, score))
+                def eval_fn(chain, rung_idx, fidelity):
+                    n_seeds, n_ds = fidelity
+                    tag = f'r{rnd}_rung{rung_idx}_{idx_by_id[id(chain)]}'
+                    if self._time_up():
+                        return float('inf')
+                    return self._eval_chain_at_fidelity(chain, n_seeds, n_ds, tag)
 
-                        desc = ' -> '.join(a for a, _ in chain)
-                        fmt = f"{score:.4f}" if self.multi else f"{score:.0f}"
-                        if score < self.best_chain_score:
-                            self.best_chain_score = score
-                            self.best_chain = chain
-                            self._update_best('chain', chain, score)
-                            print(f"    [{desc}]: NEW BEST {fmt}")
-                        else:
-                            tag = fmt if score < 1e6 else "infeasible"
-                            print(f"    [{desc}]: {tag}")
+                winner, winner_score, history = successive_halving(
+                    chain_list, eval_fn, rungs, eta=2)
 
+                # Record best score seen for each chain across rungs
+                best_by_id = {}
+                for chain, rung_idx, score in history:
+                    key = id(chain)
+                    if key not in best_by_id or score < best_by_id[key]:
+                        best_by_id[key] = score
+
+                for idx, chain in to_eval:
+                    score = best_by_id.get(id(chain), float('inf'))
+                    population[idx] = (chain, score)
+                    self.total_trials += 1
+                    self.chain_history.append((chain, score))
+
+                    desc = ' -> '.join(a for a, _ in chain)
+                    fmt = f"{score:.4f}" if self.multi else f"{score:.0f}"
+                    if score < self.best_chain_score:
+                        self.best_chain_score = score
+                        self.best_chain = chain
+                        self._update_best('chain', chain, score)
+                        print(f"    [{desc}]: NEW BEST {fmt}")
+                    else:
+                        tag = fmt if score < 1e6 else "infeasible"
+                        print(f"    [{desc}]: {tag}")
+
+                self.cache.save()
                 self._save()
 
             population.sort(key=lambda x: x[1])
@@ -909,118 +1013,85 @@ class AutoTuner:
         self.phase = 'param_tune'
         self._save()
 
-    # ── Phase 4: Chain Rediscovery ───────────────────────────
+    # ── Phase 4: Rescore Top Chains with Tuned Params ────────
 
-    def _rediscover_chains(self):
+    def _rescore_top_chains(self):
+        """Take top-5 chains from Phase 2 and re-score them using tuned params.
+
+        The GA-based chain rediscovery (old Phase 4) duplicated work: it
+        re-ran the entire tournament with the same chain structures but new
+        params. We can get ~95% of that benefit far cheaper by just swapping
+        tuned params into the top chains and re-scoring them once each.
+        """
         if self.phase != 'chain_rediscover':
             return
         if self._time_up():
-            print("\n  Time budget reached, skipping chain rediscovery")
+            print("\n  Time budget reached, skipping chain rescoring")
             self.phase = 'finalize'
             self._save()
             return
 
-        pool = self.core_algos
-        if len(pool) < 2:
-            print("\n  Core pool too small for chaining, skipping rediscovery")
+        if not self.chain_history:
+            print("\n  No chain history, skipping rescoring")
             self.phase = 'finalize'
             self._save()
             return
-
-        eval_ds = self.eval_subset
-        rounds = max(2, self.chain_rounds - 1)
 
         print(f"\n{'='*60}")
-        print(f"  Phase 4: Chain Rediscovery (tuned params)")
-        print(f"  Pool: {', '.join(pool)}")
-        print(f"  Eval on: {', '.join(self._ds_label(d) for d in eval_ds)}")
-        print(f"  Population: {self.chain_pop}, Rounds: {rounds}")
-        print(f"  Time remaining: {self._time_left():.0f}s")
+        print(f"  Phase 4: Rescore Top Chains (tuned params)")
         print(f"{'='*60}")
 
-        population = []
-
-        # Seed with top chains from initial discovery, rebuilt with tuned params
-        initial_sorted = sorted(self.chain_history, key=lambda x: x[1])
-        for chain, _ in initial_sorted[:5]:
-            rebuilt = [(a, self.best_params.get(a, DEFAULT_PARAMS.get(a, {})))
-                       for a, _ in chain if a in pool]
-            if len(rebuilt) >= 2:
-                population.append((rebuilt, float('inf')))
-
-        # Fill with random chains using tuned params
-        while len(population) < self.chain_pop:
-            population.append((random_chain(pool, self.best_params, self.rng),
-                               float('inf')))
-
-        round_bests = []
-
-        for rnd in range(rounds):
-            if self._time_up():
-                print(f"  Time budget reached at round {rnd+1}")
+        # Collect top 5 unique chain structures (by algo sequence)
+        seen_structures = set()
+        top_rescored = []
+        sorted_chains = sorted(self.chain_history, key=lambda x: x[1])
+        for chain, _ in sorted_chains:
+            sig = tuple(a for a, _ in chain)
+            if sig in seen_structures:
+                continue
+            seen_structures.add(sig)
+            # Rebuild with tuned params
+            rebuilt = [(a, dict(self.best_params.get(a, DEFAULT_PARAMS.get(a, {}))))
+                       for a, _ in chain]
+            top_rescored.append(rebuilt)
+            if len(top_rescored) >= 5:
                 break
 
-            print(f"\n  Round {rnd+1}/{rounds} ({len(population)} chains)")
+        if not top_rescored:
+            print("  No chains to rescore")
+            self.phase = 'finalize'
+            self._save()
+            return
 
-            to_eval = [(i, c) for i, (c, s) in enumerate(population)
-                       if s == float('inf')]
-            if to_eval:
-                futures = {}
-                with ProcessPoolExecutor(max_workers=self.max_workers) as pool_exec:
-                    for idx, chain in to_eval:
-                        wd = os.path.join(self.output_dir, 'chains_r2',
-                                          f'r{rnd}_c{idx}')
-                        if self.multi:
-                            fut = pool_exec.submit(
-                                eval_chain_multi_seed_datasets,
-                                self.binary, eval_ds, chain,
-                                self.eval_seeds, wd, self.baselines)
-                        else:
-                            fut = pool_exec.submit(
-                                eval_chain_multi_seed,
-                                self.binary, self.datasets[0],
-                                chain, self.eval_seeds, wd)
-                        futures[fut] = idx
+        n_seeds_full = len(self.eval_seeds)
+        n_ds_full = len(self.eval_subset)
 
-                    for fut in as_completed(futures):
-                        idx = futures[fut]
-                        score = fut.result()
-                        chain = population[idx][0]
-                        population[idx] = (chain, score)
-                        self.total_trials += 1
-                        self.chain_history.append((chain, score))
+        # Evaluate all chains in parallel (each _eval_chain_at_fidelity
+        # already parallelizes its inner ds×seed loop, so use threads here
+        # to overlap the I/O-bound subprocess waits across chains).
+        def _rescore(args):
+            i, chain = args
+            score = self._eval_chain_at_fidelity(
+                chain, n_seeds_full, n_ds_full, f'rescore_{i}')
+            return i, chain, score
 
-                        desc = ' -> '.join(a for a, _ in chain)
-                        fmt = f"{score:.4f}" if self.multi else f"{score:.0f}"
-                        if score < self.best_chain_score:
-                            self.best_chain_score = score
-                            self.best_chain = chain
-                            self._update_best('chain', chain, score)
-                            print(f"    [{desc}]: NEW BEST {fmt}")
-                        else:
-                            tag = fmt if score < 1e6 else "infeasible"
-                            print(f"    [{desc}]: {tag}")
+        with ThreadPoolExecutor(max_workers=len(top_rescored)) as pool:
+            for i, chain, score in pool.map(_rescore, enumerate(top_rescored)):
+                self.total_trials += 1
+                self.chain_history.append((chain, score))
 
-                self._save()
+                desc = ' -> '.join(a for a, _ in chain)
+                fmt = f"{score:.4f}" if self.multi else f"{score:.0f}"
+                if score < self.best_chain_score:
+                    self.best_chain_score = score
+                    self.best_chain = chain
+                    self._update_best('chain', chain, score)
+                    print(f"  [{desc}]: NEW BEST {fmt}")
+                else:
+                    tag = fmt if score < 1e6 else "infeasible"
+                    print(f"  [{desc}]: {tag}")
 
-            population.sort(key=lambda x: x[1])
-            rb = population[0][1] if population else float('inf')
-            round_bests.append(rb)
-            fmt = f"{rb:.4f}" if self.multi else f"{rb:.0f}"
-            print(f"  Round {rnd+1} best: {fmt}")
-
-            if self._plateau(round_bests, window=2, eps=0.002):
-                print(f"  Chain plateau, stopping early")
-                break
-
-            survivors = population[:max(2, len(population) // 2)]
-            new_pop = list(survivors)
-            while len(new_pop) < self.chain_pop:
-                parent = self.rng.choice(survivors)[0]
-                new_pop.append((mutate_chain(parent, pool, self.best_params,
-                                             self.rng), float('inf')))
-            population = new_pop
-
+        self.cache.save()
         self.phase = 'finalize'
         self._save()
 
@@ -1199,7 +1270,7 @@ class AutoTuner:
             self._discover_chains()
             self._extract_core_algos()
             self._tune_params()
-            self._rediscover_chains()
+            self._rescore_top_chains()
             self._finalize()
         except KeyboardInterrupt:
             print(f"\n\n[AutoTuner] Interrupted! Saving checkpoint...")

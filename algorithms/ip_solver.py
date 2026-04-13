@@ -1,18 +1,11 @@
 """
-Optimized IP/CP Solver for Exam Timetabling
-============================================
+Primary:  OR-Tools CP-SAT (fast model build, native Booleans, auto symmetry breaking)
+Fallback: PuLP / CBC (if ortools unavailable)
 
-Primary:  OR-Tools CP-SAT  (fast model build, native Booleans, auto symmetry breaking)
-Fallback: PuLP / CBC       (if ortools unavailable)
-
-Key optimizations over the original:
-  1. CP-SAT replaces PuLP as primary solver (5–20× faster model construction)
-  2. Per-conflict proximity variable replaces O(conflicts × periods²) objective terms
-     → fixes McCormick linearization correctness + massive variable/term reduction
-  3. NetworkX clique enumeration removed (CP-SAT presolve handles tightening)
-  4. Array-indexed lookups replace dict-keyed variables
-  5. Aggressive domain pruning before variable creation
-  6. tracemalloc removed from hot path (measured externally if needed)
+CP-SAT replaces PuLP as primary solver (5-20x faster model construction).
+Per-conflict proximity variable replaces O(conflicts * periods^2) objective terms.
+Array-indexed lookups replace dict-keyed variables.
+Aggressive domain pruning before variable creation.
 """
 
 from core.models import ProblemInstance, Solution

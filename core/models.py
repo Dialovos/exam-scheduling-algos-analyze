@@ -1,6 +1,7 @@
 """
-Core data models for the Capacitated Examination Timetabling Problem.
-Reference: McCollum et al. (2007) - "The Second International Timetabling Competition"
+ITC 2007 exam timetabling data structures: Exam, Period, Room, constraints,
+weightings, ProblemInstance (with derived conflict/adjacency data), and Solution.
+Reference: McCollum et al. (2007).
 """
 
 from __future__ import annotations

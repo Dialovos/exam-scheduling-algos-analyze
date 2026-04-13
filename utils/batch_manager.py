@@ -1,5 +1,5 @@
 """
-Batch Manager — isolates each experiment run into its own directory.
+Isolates each experiment run into its own directory.
 
 Modes:
   - Auto: batch_002_20260405_153022 (incremented ID + timestamp)

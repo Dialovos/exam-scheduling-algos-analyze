@@ -1,6 +1,4 @@
 """
-Simulated Annealing
-===================
 Geometric cooling with probabilistic acceptance of worse moves.
 Uses move_delta for O(k) neighbor evaluation.
 Re-syncs with full_eval every 50 iterations.

@@ -1,7 +1,5 @@
 """
-Tabu Search — Feasibility-First
-================================
-Uses move_delta for fast neighbor evaluation.
+Feasibility-first tabu search with move_delta neighbor evaluation.
 Re-syncs with full_eval every 10 iterations to prevent drift.
 When infeasible: focuses neighborhood on hard-violating exams.
 """

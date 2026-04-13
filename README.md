@@ -1,62 +1,62 @@
+<p align="center">
+  <img src="graphs/algo_radar.png" width="420"/>
+</p>
+
 <h1 align="center">Exam Scheduling</h1>
 
 <p align="center">
-  <i>Twelve algorithms, one C++ solver, eight ITC 2007 datasets —<br/>
-  all fighting over where to put next semester's exams.</i>
+  Metaheuristic comparison on the ITC 2007 Capacitated Examination Timetabling Problem
 </p>
 
 <p align="center">
-  <b>Hoang Le</b> &nbsp;·&nbsp; <b>Ian Cronin</b>
+  <img src="https://img.shields.io/badge/C%2B%2B-20-00599C?style=flat-square&logo=cplusplus" alt="C++20"/>
+  <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.10+"/>
+  <img src="https://img.shields.io/badge/Benchmark-ITC%202007-8B6914?style=flat-square" alt="ITC 2007"/>
+  <img src="https://img.shields.io/badge/Algorithms-12-2E8B57?style=flat-square" alt="12 Algorithms"/>
 </p>
 
-<p align="center">
-  <img src="docs/images/dashboard.png" width="860" alt="Results dashboard: soft penalty, runtime, constraint breakdown, feasibility rate">
-</p>
+<br/>
 
-<p align="center"><sub><i>Baseline run across seven algorithms, aggregated over 8 datasets × 10 seeds (n=80 per bar).</i></sub></p>
+Twelve optimization algorithms — constructive, local search, population-based, and exact — compiled into a single C++ solver and benchmarked on all eight [ITC 2007](https://www.eeecs.qub.ac.uk/itc2007/examtrack/) datasets. Python fallbacks available when the binary is unavailable.
+
+> **Contributors** &ensp; Hoang Le &ensp;·&ensp; Ian Cronin
 
 ---
 
-## Abstract
+## Problem
 
-The exact problem flavor for this project is the Capacitated Examination Timetabling problem. The problem that we’re trying to solve is that when given a finite set of exams, students, available time slots, and rooms with a finite number of seating capacities, how can we assign every exam to exactly one pair (time slot, room) so that the hard constraint is satisfied while minimizing the soft constraints violation. The hard constraint is that no student is scheduled to take more than one exam in the same time slot, and that only one exam is assigned to that time slot, to avoid exceeding the room capacity. It should be considered that soft constraints, such as assigning a student to an adjacent time slot, may increase their fatigue for the latter exam. The objective is to ensure minimal penalty for each student-schedule pair within the available time slot for fairness.
+The Capacitated Examination Timetabling Problem is NP-hard (graph-coloring variant). Given exams, students, time slots, and rooms with limited seating:
 
-The Examination Timetabling problem is NP-hard. Since it follows the graph-coloring approach, the exams are modeled as graph vertices, with an edge connecting any two exams that at least one student shares. Due to the NP-completeness of graph coloring and the need to minimize conflicts for soft constraints in the timetable, no known P algorithm has been found, according to my research. This means there will be an exponential worst-case scenario without using a heuristic approach to solving this problem. 
+- Assign every exam to exactly one (period, room) pair
+- Hard constraints: no student sits two exams in the same period; room capacity respected; exam fits the period length
+- Soft constraints: penalize back-to-back exams, same-day exams, exams too close together, mixed-duration rooms, and large exams late in the schedule
+- Fitness: `hard_violations * 100000 + soft_penalty` (feasibility-first)
 
-One C++ solver hosting eleven algos (excluding a handler algo), a Python bridge that falls back gracefully when the binary isn't built, an auto-tuner that hunts for better defaults across datasets, and a handful of plot types for research-quality figures. Everything runs against the [ITC 2007 Examination Track](https://www.eeecs.qub.ac.uk/itc2007/examtrack/) benchmark and a synthetic generator.
+Exams are vertices, edges connect any pair sharing at least one student. No polynomial-time algorithm is known — everything here is heuristic or metaheuristic.
 
-## Quick start
+## Algorithms
 
-```bash
-make                                        # build the C++ solver
-pip install -r requirements.txt
-python main.py --dataset instances/exam_comp_set4.exam
-```
+| # | Algorithm | Type | Description |
+|:---:|-----------|------|-------------|
+| 1 | Greedy | Constructive | DSatur graph-coloring heuristic |
+| 2 | Tabu Search | Local search | Feasibility-first with swap + room-only moves |
+| 3 | Kempe Chain | Local search | Conflict-chain period swaps with SA acceptance |
+| 4 | Simulated Annealing | Local search | Multi-neighbourhood with geometric cooling and reheat |
+| 5 | ALNS | Hybrid | Adaptive destroy-and-repair with proximity-aware operators |
+| 6 | Great Deluge | Local search | Linearly decaying acceptance level + swap moves |
+| 7 | ABC | Swarm | Artificial Bee Colony with cost-weighted multi-move bees |
+| 8 | GA | Evolutionary | Memetic GA: Kempe mutation + saturation-degree crossover |
+| 9 | LAHC | Local search | Late Acceptance Hill Climbing with history list |
+| 10 | WOA | Swarm | Whale Optimization with spiral + encircling |
+| 11 | CP-SAT | Exact | Constraint programming via OR-Tools CP-SAT |
+| 12 | GVNS | Hybrid | General Variable Neighbourhood Search with SA acceptance |
 
-That runs every C++ algorithm on set4 (273 exams — small and fast) and drops the output into a new batch under `results/`. For interactive tinkering, open `exam_scheduling.ipynb`.
-
-## Headline results
-
-Lower is better everywhere. **HHO** wins on quality. **Greedy** wins on speed. **Tabu** is the all-rounder. The tightly-constrained sets (5 and 8) punish anything that can't reason carefully about room capacity.
-
-<p align="center">
-  <img src="docs/images/heatmap.png" width="860" alt="Cross-dataset soft penalty heatmap">
-</p>
-
-<p align="center"><sub><i>Cross-dataset soft penalty. HHO holds up across the board; Greedy, SA, ALNS, and GD collapse on the room-capacity-heavy sets 5 and 8.</i></sub></p>
-
-<p align="center">
-  <img src="docs/images/pareto_set1.png" width="720" alt="Quality vs runtime Pareto frontier — set1">
-</p>
-
-<p align="center"><sub><i>Quality–runtime trade-off on set1 (607 exams). HHO dominates the cost axis but pays for it in seconds; ALNS and Tabu sit comfortably on the Pareto frontier.</i></sub></p>
-
-> The figures above show the **seven baseline algorithms**. ABC, GA, LAHC, Natural Selection, and the IP solver were added after the baseline run and are listed in the algorithm table below — their numbers just aren't in these specific plots yet.
+Delta evaluation (`move_delta()`, O(k) per move instead of O(n^2) full eval) drives every local search. Swap moves expand the neighbourhood by exchanging periods of two exams at once. A steepest-descent room post-processing pass runs on every final solution. Warm-start chaining (`--init-solution`) pipes one algorithm's output into the next.
 
 ## Datasets
 
 | Set | Exams | Notes |
-|-----|------:|-------|
+|:---:|------:|-------|
 | set4 | 273 | Small, fast — good for quick tests and parameter sweeps |
 | set6 | 242 | Smallest set, minimal constraints |
 | set8 | 598 | Medium, well-constrained |
@@ -66,122 +66,134 @@ Lower is better everywhere. **HHO** wins on quality. **Greedy** wins on speed. *
 | set5 | 1018 | Large, tight room capacity |
 | set7 | 1096 | Largest set |
 
-All sourced from the [ITC 2007 Examination Track](https://www.eeecs.qub.ac.uk/itc2007/examtrack/). The synthetic generator also writes out in ITC 2007 format, so anything that reads a real set reads a fake one too.
+All sourced from the [ITC 2007 Examination Track](https://www.eeecs.qub.ac.uk/itc2007/examtrack/). A synthetic generator writes ITC 2007 format for scalability testing.
 
-## Algorithms
+---
 
-| Algorithm | Type | Description |
-|---|---|---|
-| **Greedy** | Constructive | DSatur graph-coloring heuristic |
-| **Tabu Search** | Local search | Feasibility-first with swap + room-only moves |
-| **HHO** | Population | Harris Hawks with Levy flights + smart perturbation |
-| **Kempe Chain** | Local search | Conflict-chain period swaps with SA acceptance |
-| **Simulated Annealing** | Local search | FastSA pruning, swap moves, room-only moves |
-| **ALNS** | Hybrid | Adaptive destroy-and-repair with proximity-aware operators |
-| **Great Deluge** | Local search | Linearly decaying acceptance level + swap moves |
-| **ABC** | Swarm | Artificial Bee Colony with cost-weighted multi-move bees |
-| **Genetic Algorithm** | Evolutionary | Memetic GA: delta-based crossover + local-search mutation |
-| **LAHC** | Local search | Late Acceptance Hill Climbing with history list |
-| **Natural Selection** | Meta | Trials all algorithms, runs top-N at full budget |
-| **IP** | Exact | Constraint programming via OR-Tools CP-SAT (Python) |
+## Results
 
-All C++ algorithms are called from Python through `cpp_bridge.py`. If the binary isn't compiled, Python fallbacks kick in automatically — you never get stuck waiting on a build.
+### Aggregate performance
 
-**Natural Selection** (`--algo ns`) is a meta-algorithm and not part of `--algo all`.
+<table>
+<tr>
+<td width="50%">
+<p align="center"><b>Soft penalty · Runtime · Memory</b></p>
+<img src="graphs/algo_bars.png" width="100%"/>
+<p align="center"><sub>Mean with error bars across all eight datasets</sub></p>
+</td>
+<td width="50%">
+<p align="center"><b>Soft penalty distribution</b></p>
+<img src="graphs/algo_boxes.png" width="100%"/>
+<p align="center"><sub>Box plot spread across datasets per algorithm</sub></p>
+</td>
+</tr>
+</table>
 
-### What makes them fast
+### Multi-dimensional view
 
-A few optimizations matter more than the rest:
+<table>
+<tr>
+<td width="50%">
+<p align="center"><b>Per-dataset heatmap</b></p>
+<img src="graphs/algo_heatmap.png" width="100%"/>
+<p align="center"><sub>Normalized soft penalty, algorithms x datasets. Cell values are actual penalties.</sub></p>
+</td>
+<td width="50%">
+<p align="center"><b>Performance profile</b></p>
+<img src="graphs/algo_radar.png" width="100%"/>
+<p align="center"><sub>Memory, runtime, soft penalty, and constraint components. Smaller = better.</sub></p>
+</td>
+</tr>
+</table>
 
-- **Delta evaluation** — `move_delta()` is O(k) instead of the O(n²) full eval per move. This is the single biggest speedup and every local-search algorithm leans on it.
-- **Swap moves** — SA, LAHC, and GD expand their neighborhood beyond single-exam re-assignment by exchanging the periods of two exams at once.
-- **FastSA pruning** — at low temperature, "frozen" exams get skipped. About a 90% skip rate on inactive bins.
-- **Room post-processing** — `optimize_rooms()` runs a steepest-descent room reassignment on the final solution. Cheap, always worth it.
-- **Warm-start chaining** — `--init-solution` pipes one algorithm's output into the next (e.g. `SA → GD`), so later stages start from a better place. The auto-tuner's winning chain is persisted into `tuned_params.json`, so the notebook can replay it without remembering the recipe.
+### Quality vs cost
 
-## Auto-tuner
+<table>
+<tr>
+<td width="50%">
+<p align="center"><b>Runtime vs soft penalty</b></p>
+<img src="graphs/algo_scatter.png" width="100%"/>
+<p align="center"><sub>Bottom-left is the sweet spot</sub></p>
+</td>
+<td width="50%">
+<p align="center"><b>Per-dataset trends</b></p>
+<img src="graphs/summary_lines.png" width="100%"/>
+<p align="center"><sub>Soft penalty, runtime, and peak memory across all sets</sub></p>
+</td>
+</tr>
+</table>
 
-Automated parameter optimization and algorithm-chain discovery. Supports single-dataset tuning or **global multi-dataset mode** to avoid overfitting.
-
-```bash
-# Single dataset
-python -m tooling.auto_tuner instances/exam_comp_set4.exam
-
-# Global — all ITC 2007 sets (recommended; prevents overfitting)
-python -m tooling.auto_tuner --all-sets
-python -m tooling.auto_tuner --all-sets --synthetic          # include generated data
-python -m tooling.auto_tuner --all-sets --max-time 20        # 20 min budget
-python -m tooling.auto_tuner --all-sets --resume             # pick up from checkpoint
-python -m tooling.auto_tuner --all-sets --no-auto-update     # tune without updating defaults
-
-# Via main.py
-python main.py --mode tune --dataset instances/exam_comp_set1.exam
-python main.py --mode tune                                   # defaults to all sets
-```
-
-The pipeline runs in four phases:
-
-1. **Quick screen** — all algorithms on all datasets in parallel.
-2. **Parameter tuning** — random + perturbation sampling on a representative subset (small / medium / large auto-picked).
-3. **Chain discovery** — tournament natural selection over warm-started chains, evaluated across datasets. The winning chain lands in `tuned_params.json` under `best_chain`, ready to be re-run from the notebook with one switch.
-4. **Final validation** — multi-seed on every dataset.
-
-**Anti-overfitting:** in global mode, scores are normalized per-dataset (score / baseline) and aggregated via geometric mean. A config that's great on set4 but terrible on set1 loses to one that's merely solid across both.
-
-**Features:** checkpoint/resume (atomic JSON), parallel execution (6 workers), wall-time budgets (default 30 min global / 10 min single), plateau detection, and the `--synthetic` flag for generated test data.
-
-### Tuned parameters
-
-All algorithm defaults flow from one source of truth: `tooling/tuned_params.json`. After a tuning run, parameters are auto-updated only if they pass three checks:
-
-1. **Aggregate score improved** (geometric mean across all datasets).
-2. **Comparable trial count** (within 2× of the previous run).
-3. **No single-dataset regression greater than 15%**.
-
-Every update lands in `tooling/tuned_params_log.json` with full version history for rollback. Plateau detection stops the churn when improvements flatten out (less than 1% across the last three updates).
-
-```bash
-python main.py --show-params              # active defaults + version history
-python main.py --rollback-params 2        # restore version 2 from log
-```
-
-A passive regression checker also runs on normal executions — it warns you if results drift more than 15% below the tuned baseline. No blocking, just a heads-up.
-
-## Notebook experiments
-
-`exam_scheduling.ipynb` is the workbench for everything outside the CLI. The main experiment cell takes a single switch:
-
-- `EXPERIMENT_MODE = "individual"` — race every algorithm in `ALGO` against the configured datasets. The familiar tabu/sa/hho lineup.
-- `EXPERIMENT_MODE = "chain"` — run the tuned best chain (or a manual override) end-to-end and log it as a single composite `Chain(sa→gd)` entry, with feasibility, soft penalty, runtime, and peak memory all in one row.
-
-There's also a synthetic size scan that walks the chain across 25 → 200 exams in steps of 25 and plots quality, runtime, and peak memory on a continuous axis. Useful for spotting where a chain starts to choke before you commit to a full ITC run.
+### Scalability
 
 <p align="center">
-  <img src="docs/images/scan_smoke.png" width="780" alt="Continuous size scan: soft penalty (left) and runtime + peak memory (right) vs problem size">
+  <img src="graphs/scan_smoke.png" width="75%"/>
 </p>
+<p align="center"><sub>Chain(SA, Kempe, GD) quality and cost vs synthetic instance size</sub></p>
 
-<p align="center"><sub><i>Continuous size scan. Quality on the left, runtime and peak RSS on a dual y-axis on the right. Memory is captured per subprocess by polling <code>/proc/&lt;pid&gt;/status</code>.</i></sub></p>
+---
 
-## Command reference
+## Usage
+
+### Prerequisites
+
+- C++ compiler with C++20 support (g++ recommended)
+- Python 3.10+
+- pip packages: see `requirements.txt`
+
+### Quick start
+
+```bash
+# Python environment
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+
+# Build the C++ solver
+make
+
+# Run all algorithms on a dataset
+python3 main.py --dataset instances/exam_comp_set4.exam
+
+# Or open the notebook
+jupyter notebook exam_scheduling.ipynb
+```
+
+### CLI examples
+
+```bash
+# Single algorithm
+python3 main.py --dataset instances/exam_comp_set4.exam --algo sa
+
+# Multiple algorithms
+python3 main.py --dataset instances/exam_comp_set4.exam --algo sa,gd,vns
+
+# Custom parameters
+python3 main.py --dataset instances/exam_comp_set1.exam --sa-iters 10000 --seed 123
+
+# Auto-tune across all datasets
+python3 main.py --mode tune
+
+# View active tuned parameters
+python3 main.py --show-params
+```
+
+### Direct C++ usage
+
+```bash
+./cpp/build/exam_solver instances/exam_comp_set4.exam --algo all -v
+```
 
 <details>
-<summary><b>Click to expand the full flag list</b></summary>
+<summary>Full flag reference</summary>
+<br/>
 
 | Flag | Description |
 |------|-------------|
-| `--dataset FILE` | Run on an ITC 2007 `.exam` file |
-| `--algo NAME` | Algorithm: `greedy`, `tabu`, `hho`, `kempe`, `sa`, `alns`, `gd`, `abc`, `ga`, `lahc`, `ns`, `ip` |
-| `--mode MODE` | `demo` (default), `plot`, `batches`, or `tune` |
+| `--dataset FILE` | ITC 2007 `.exam` file |
+| `--algo NAME` | `greedy`, `tabu`, `kempe`, `sa`, `alns`, `gd`, `abc`, `ga`, `lahc`, `woa`, `cpsat`, `vns` |
+| `--mode MODE` | `demo` (default), `plot`, `batches`, `tune` |
 | `--size N` | Exam count for synthetic demo mode |
-| `--batch "name"` | Named batch for results |
-| `--load-batch ID` | Write into an existing batch |
-| `--no-batch` | Skip batching, write directly into `results/` |
 | `--seed N` | Random seed (default: 42) |
-| `--quiet` | Suppress progress output |
-| `--resume` | Resume auto-tuner from checkpoint (tune mode) |
-| `--tabu-iters` | Tabu iterations (from tuned defaults) |
-| `--tabu-patience` | Tabu early-stop patience |
-| `--hho-pop` / `--hho-iters` | HHO population / iterations |
+| `--tabu-iters` | Tabu iterations |
 | `--sa-iters` | SA iterations |
 | `--kempe-iters` | Kempe iterations |
 | `--alns-iters` | ALNS iterations |
@@ -189,30 +201,43 @@ There's also a synthetic size scan that walks the chain across 25 → 200 exams 
 | `--abc-pop` / `--abc-iters` | ABC colony size / iterations |
 | `--ga-pop` / `--ga-iters` | GA population / generations |
 | `--lahc-iters` / `--lahc-list` | LAHC iterations / history list length (0 = auto) |
-| `--ns-finalists` | Natural Selection finalists (default: 3) |
+| `--woa-pop` / `--woa-iters` | WOA population / iterations |
+| `--cpsat-time` | CP-SAT time limit in seconds |
+| `--vns-iters` / `--vns-budget` | GVNS iterations / scan budget per LS call (0 = auto) |
 | `--show-params` | Print active param defaults and exit |
-| `--rollback-params V` | Rollback tuned params to version `V` and exit |
-| `--no-auto-update` | Don't auto-update defaults after tuning |
-| `--force-update` | Force-update defaults even if checks fail |
+| `--rollback-params V` | Rollback tuned params to version V and exit |
 
 </details>
 
-The C++ solver can also be called directly:
+## Auto-tuner
+
+Automated parameter optimization and algorithm-chain discovery. Supports single-dataset tuning or global multi-dataset mode to avoid overfitting.
 
 ```bash
-./cpp/build/exam_solver <file.exam> [same flags] -v
+# Single dataset
+python3 -m tooling.auto_tuner instances/exam_comp_set4.exam
+
+# Global — all ITC 2007 sets (recommended)
+python3 -m tooling.auto_tuner --all-sets
+python3 -m tooling.auto_tuner --all-sets --max-time 20    # 20 min budget
+python3 -m tooling.auto_tuner --all-sets --resume          # resume from checkpoint
 ```
 
-## Project structure
+Runs in phases: quick screen, parameter tuning, chain discovery, final validation. Winning parameters are saved to `tooling/tuned_params.json` with version history for rollback.
+
+<details>
+<summary>Project structure</summary>
+<br/>
 
 ```
-exam_scheduling/
-├── main.py
-├── exam_scheduling.ipynb
+exam-scheduling/
+├── README.md
 ├── Makefile
 ├── requirements.txt
+├── main.py
+├── exam_scheduling.ipynb
 │
-├── core/                        # Problem domain + evaluation
+├── core/
 │   ├── models.py
 │   ├── parser.py
 │   ├── generator.py
@@ -220,55 +245,58 @@ exam_scheduling/
 │   └── evaluator.py
 │
 ├── algorithms/
-│   ├── cpp_bridge.py            # Subprocess bridge to C++, with fallbacks
+│   ├── cpp_bridge.py
 │   ├── ip_solver.py
-│   ├── greedy.py, tabu_search.py, hho.py, kempe_chain.py
-│   ├── simulated_annealing.py, alns.py, great_deluge.py
-│   ├── abc.py, ga.py, natural_selection.py
-│   └── ...
+│   ├── greedy.py
+│   ├── tabu_search.py
+│   ├── kempe_chain.py
+│   ├── simulated_annealing.py
+│   ├── alns.py
+│   ├── great_deluge.py
+│   ├── abc.py
+│   └── ga.py
 │
 ├── cpp/
-│   ├── src/                     # Headers + main.cpp
-│   │   ├── main.cpp
-│   │   ├── models.h             # Exam, Period, Room, Solution, EvalResult
-│   │   ├── parser.h             # ITC 2007 .exam file parser
-│   │   ├── evaluator.h          # Full eval + O(k) move_delta + optimize_rooms
-│   │   ├── greedy.h, tabu.h, hho.h, kempe.h, sa.h
-│   │   ├── alns.h, gd.h, abc.h, ga.h, lahc.h
-│   │   └── natural_selection.h
-│   └── build/
+│   └── src/
+│       ├── main.cpp
+│       ├── models.h, parser.h, evaluator.h, greedy.h
+│       ├── neighbourhoods.h
+│       ├── tabu.h, kempe.h, sa.h, alns.h, gd.h
+│       ├── abc.h, ga.h, lahc.h, woa.h
+│       ├── cpsat.h, vns.h, feasibility.h
+│       └── archive/
 │
 ├── tooling/
-│   ├── auto_tuner.py            # Parameter tuning + chain discovery
-│   ├── tuned_params.py          # Tuned params loader/writer/rollback
-│   └── tuned_params.json        # Active tuned defaults
+│   ├── auto_tuner.py
+│   ├── tuned_params.py
+│   └── tuned_params.json
 │
 ├── utils/
-│   ├── batch_manager.py         # Batch isolation (auto/manual/load)
-│   ├── results_logger.py        # Structured logging (JSONL + CSV)
-│   ├── plotting.py              # 14 chart types, 12-color palette
-│   └── benchmark.py
+│   ├── batch_manager.py
+│   ├── results_logger.py
+│   └── plotting.py
 │
-├── docs/images/                 # Figures used in this README
-├── instances/                   # ITC 2007 sets 1–8 + synthetic
-└── results/
-    ├── best/
-    └── batch_NNN_<name>/        # Per-experiment batches
+├── instances/
+├── results/
+├── graphs/
+├── report/
+├── references/
+└── tests/
 ```
 
-## Notes on GenAI use
+</details>
 
-AI-assisted coding was used throughout this project. All benchmarking, experimental design, and technical writing were done by the (non-AI) author.
+## GenAI usage disclosure
+
+AI-assisted coding (Claude) was used throughout development for algorithm implementation, debugging, and code refactoring. Experimental design, benchmarking methodology, parameter choices, and technical writing were done by the human authors.
 
 ## References
 
-1. [ITC 2007 Examination Track — QUB](https://www.eeecs.qub.ac.uk/itc2007/examtrack/)
-2. [Addressing Examination Timetabling — MDPI](https://www.mdpi.com/2079-3197/8/2/46)
-3. [FastSA-ETP — Burke & Bykov (2008)](https://doi.org/10.1007/978-3-540-89439-1_26)
-4. [Harris Hawks Optimization — ScienceDirect](https://www.sciencedirect.com/science/article/abs/pii/S0167739X18313530)
-5. [Adaptive Large Neighbourhood Search — Ropke & Pisinger (2006)](https://doi.org/10.1016/j.cor.2005.09.018)
-6. [Great Deluge — Dueck (1993)](https://doi.org/10.1007/BF01096763)
-7. [Kempe Chains in Graph Coloring — Wikipedia](https://en.wikipedia.org/wiki/Kempe_chain)
-8. [Late Acceptance Hill Climbing — Burke & Bykov (2017)](https://doi.org/10.1016/j.ejor.2016.07.012)
-9. [Artificial Bee Colony — Karaboga (2005)](https://abc.erciyes.edu.tr/)
-10. [Simulated Annealing — Wikipedia](https://en.wikipedia.org/wiki/Simulated_annealing)
+See [`references/references.md`](references/references.md) for the full annotated bibliography.
+
+- [ITC 2007 Examination Track](https://www.eeecs.qub.ac.uk/itc2007/examtrack/) — benchmark datasets
+- [Burke & Bykov (2008)](https://doi.org/10.1007/978-3-540-89439-1_26) — FastSA-ETP
+- [Ropke & Pisinger (2006)](https://doi.org/10.1016/j.cor.2005.09.018) — ALNS
+- [Hansen et al. (2010)](https://doi.org/10.1016/j.ejor.2008.10.012) — GVNS
+- [Mirjalili & Lewis (2016)](https://doi.org/10.1016/j.advengsoft.2016.01.008) — WOA
+- [Kirkpatrick et al. (1983)](https://doi.org/10.1126/science.220.4598.671) — Simulated Annealing

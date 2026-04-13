@@ -1,8 +1,6 @@
 /*
- * parser.h — ITC 2007 .exam file parser
- *
- * Reads [Exams], [Periods], [Rooms], [PeriodHardConstraints],
- * [RoomHardConstraints], and [InstitutionalWeightings] sections.
+ * ITC 2007 .exam file parser. Reads [Exams], [Periods], [Rooms],
+ * [PeriodHardConstraints], [RoomHardConstraints], and [InstitutionalWeightings].
  */
 
 #pragma once

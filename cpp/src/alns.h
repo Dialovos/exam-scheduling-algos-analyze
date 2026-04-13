@@ -1,8 +1,8 @@
 /*
- * alns.h — Adaptive Large Neighborhood Search
+ * Adaptive large neighborhood search (ALNS).
  *
- * Destroy-and-repair framework with adaptive operator selection.
- * 3 destroy operators (random, worst, related) + 2 repair operators (greedy, random).
+ * Destroy-and-repair with adaptive operator selection.
+ * 3 destroy operators (random, worst, related) + 2 repair (greedy, random).
  * SA-like acceptance criterion.
  */
 
@@ -41,29 +41,33 @@ inline int roulette(const std::vector<double>& weights, std::mt19937& rng) {
 struct SavedState {
     std::vector<int> period_of;
     std::vector<int> room_of;
-    std::unordered_map<int64_t, int> pr_enroll;
+    std::vector<int> pr_enroll;
+    std::vector<int> pr_count;
 };
 
 inline SavedState save_state(const Solution& sol) {
-    return {sol.period_of, sol.room_of, sol.pr_enroll};
+    return {sol.period_of, sol.room_of, sol.pr_enroll, sol.pr_count};
 }
 
 inline void restore_state(Solution& sol, const SavedState& s) {
     sol.period_of = s.period_of;
     sol.room_of = s.room_of;
     sol.pr_enroll = s.pr_enroll;
+    sol.pr_count = s.pr_count;
 }
 
 inline void unassign(Solution& sol, int eid) {
     int pid = sol.period_of[eid];
     if (pid >= 0) {
         int rid = sol.room_of[eid];
-        int enr = sol.enroll_cache[eid];
-        sol.pr_enroll[sol.pr_key(pid, rid)] -= enr;
+        int key = sol.pr_key(pid, rid);
+        sol.pr_enroll[key] -= sol.enroll_cache[eid];
+        sol.pr_count[key]--;
         sol.period_of[eid] = -1;
         sol.room_of[eid] = -1;
     }
 }
+
 
 // ── Destroy operators ──────────────────────────────────────────
 
@@ -98,7 +102,6 @@ inline std::vector<int> destroy_worst(
             if (nb_pid == pid)
                 cost += 100000;
             else if (nb_pid >= 0) {
-                // Proximity costs: two_in_a_row, two_in_a_day, period_spread
                 if (fe.period_day[pid] == fe.period_day[nb_pid]) {
                     int g = std::abs(fe.period_daypos[pid] - fe.period_daypos[nb_pid]);
                     if (g == 1) cost += fe.w_2row;
@@ -108,7 +111,6 @@ inline std::vector<int> destroy_worst(
                 if (gap > 0 && gap <= fe.w_spread) cost += 1;
             }
         }
-        // Period/room penalty contribution
         cost += fe.period_pen[pid] + fe.room_pen[sol.room_of[e]];
         costs.push_back({cost, e});
     }
@@ -161,6 +163,63 @@ inline std::vector<int> destroy_related(
     return removed;
 }
 
+// Shaw removal: destroy by relatedness (shared students + proximity + enrollment)
+inline std::vector<int> destroy_shaw(
+    Solution& sol, const ProblemInstance& prob, int ne, int n_destroy, std::mt19937& rng)
+{
+    std::uniform_int_distribution<int> de(0, ne - 1);
+    int seed = de(rng);
+    while (sol.period_of[seed] < 0 && n_destroy > 0) seed = de(rng);
+    int seed_pid = sol.period_of[seed];
+
+    // Compute relatedness to seed for all assigned exams
+    std::vector<std::pair<double, int>> relatedness;
+    for (int e = 0; e < ne; e++) {
+        if (e == seed || sol.period_of[e] < 0) continue;
+        double r = 0;
+        for (auto& [nb, shared] : prob.adj[seed])
+            if (nb == e) { r += shared * 10.0; break; }
+        int pdiff = std::abs(sol.period_of[e] - seed_pid);
+        if (pdiff == 0) r += 5.0;
+        else if (pdiff <= 3) r += 3.0;
+        int ediff = std::abs(prob.exams[e].enrollment() - prob.exams[seed].enrollment());
+        if (ediff < 20) r += 2.0;
+        relatedness.push_back({r, e});
+    }
+    std::sort(relatedness.begin(), relatedness.end(),
+              [](auto& a, auto& b) { return a.first > b.first; });
+
+    std::vector<int> removed;
+    unassign(sol, seed);
+    removed.push_back(seed);
+    for (auto& [_, e] : relatedness) {
+        if ((int)removed.size() >= n_destroy) break;
+        if (sol.period_of[e] >= 0) { unassign(sol, e); removed.push_back(e); }
+    }
+    return removed;
+}
+
+// Period-strip removal: remove all exams in a random period
+inline std::vector<int> destroy_period_strip(
+    Solution& sol, int ne, int np, int n_destroy, std::mt19937& rng)
+{
+    std::uniform_int_distribution<int> dp(0, np - 1);
+    int target_p = dp(rng);
+
+    std::vector<int> in_period;
+    for (int e = 0; e < ne; e++)
+        if (sol.period_of[e] == target_p) in_period.push_back(e);
+
+    std::shuffle(in_period.begin(), in_period.end(), rng);
+    std::vector<int> removed;
+    for (int e : in_period) {
+        if ((int)removed.size() >= n_destroy) break;
+        unassign(sol, e);
+        removed.push_back(e);
+    }
+    return removed;
+}
+
 // ── Repair operators ───────────────────────────────────────────
 
 inline void repair_greedy(
@@ -177,35 +236,42 @@ inline void repair_greedy(
     for (int eid : order) {
         const auto& vp = valid_p[eid];
         const auto& vr = valid_r[eid];
+        if (vp.empty() || vr.empty()) {
+            if (!vp.empty() && !vr.empty()) sol.assign(eid, vp[0], vr[0]);
+            continue;
+        }
+
         int best_pid = -1, best_rid = -1;
         long long best_cost = (long long)1e18;
 
+        // Period-first scan: compute adjacency cost ONCE per period,
+        // then add cheap room cost. Avoids redundant adjacency scans.
         for (int pid : vp) {
-            for (int rid : vr) {
-                long long cost = 0;
-                // Hard: student conflicts
-                for (auto& [nb, _] : fe.P.adj[eid])
-                    if (sol.period_of[nb] == pid) cost += 100000;
-                // Hard: room capacity
-                if (sol.get_pr_enroll(pid, rid) + fe.exam_enroll[eid] > fe.room_cap[rid])
-                    cost += 100000;
-                // Soft: proximity
-                for (auto& [nb, _] : fe.P.adj[eid]) {
-                    int nb_pid = sol.period_of[nb];
-                    if (nb_pid < 0 || nb_pid == pid) continue;
+            long long pcost = 0;
+            for (auto& [nb, _] : fe.P.adj[eid]) {
+                int nb_pid = sol.period_of[nb];
+                if (nb_pid < 0) continue;
+                if (nb_pid == pid) pcost += 100000;
+                else {
                     int gap = std::abs(pid - nb_pid);
-                    if (gap > 0 && gap <= fe.w_spread) cost += 1;
+                    if (gap > 0 && gap <= fe.w_spread) pcost += 1;
                     if (fe.period_day[pid] == fe.period_day[nb_pid]) {
                         int g = std::abs(fe.period_daypos[pid] - fe.period_daypos[nb_pid]);
-                        if (g == 1) cost += fe.w_2row;
-                        else if (g > 1) cost += fe.w_2day;
+                        if (g == 1) pcost += fe.w_2row;
+                        else if (g > 1) pcost += fe.w_2day;
                     }
                 }
-                // Soft: penalties
-                cost += fe.period_pen[pid] + fe.room_pen[rid];
-                // Soft: front load
-                if (fe.large_exams.count(eid) && fe.fl_penalty > 0 && fe.last_periods.count(pid))
-                    cost += fe.fl_penalty;
+            }
+            pcost += fe.period_pen[pid];
+            if (fe.large_exams.count(eid) && fe.fl_penalty > 0 && fe.last_periods.count(pid))
+                pcost += fe.fl_penalty;
+
+            // Room scan: only capacity + penalty (no adjacency)
+            for (int rid : vr) {
+                long long cost = pcost;
+                if (sol.get_pr_enroll(pid, rid) + fe.exam_enroll[eid] > fe.room_cap[rid])
+                    cost += 100000;
+                cost += fe.room_pen[rid];
                 if (cost < best_cost) {
                     best_cost = cost;
                     best_pid = pid;
@@ -216,7 +282,7 @@ inline void repair_greedy(
 
         if (best_pid >= 0)
             sol.assign(eid, best_pid, best_rid);
-        else if (!vp.empty() && !vr.empty())
+        else
             sol.assign(eid, vp[0], vr[0]);
     }
 }
@@ -238,6 +304,78 @@ inline void repair_random(
     }
 }
 
+// Regret-2 repair: place exam with highest regret (best - 2nd best cost gap) first
+inline void repair_regret2(
+    Solution& sol, const FastEvaluator& fe,
+    const std::vector<int>& removed,
+    const std::vector<std::vector<int>>& valid_p,
+    const std::vector<std::vector<int>>& valid_r)
+{
+    std::vector<int> unplaced = removed;
+
+    while (!unplaced.empty()) {
+        int max_regret_exam = -1;
+        double max_regret = -1e18;
+        int best_pid = -1, best_rid = -1;
+
+        for (int eid : unplaced) {
+            double best_cost = 1e18, second_cost = 1e18;
+            int bp = -1, br = -1;
+
+            for (int pid : valid_p[eid]) {
+                // Period adjacency cost (once per period)
+                long long pcost = 0;
+                for (auto& [nb, _] : fe.P.adj[eid]) {
+                    int nb_pid = sol.period_of[nb]; if (nb_pid < 0) continue;
+                    if (nb_pid == pid) pcost += 100000;
+                    else {
+                        int gap = std::abs(pid - nb_pid);
+                        if (gap > 0 && gap <= fe.w_spread) pcost += 1;
+                        if (fe.period_day[pid] == fe.period_day[nb_pid]) {
+                            int g = std::abs(fe.period_daypos[pid] - fe.period_daypos[nb_pid]);
+                            if (g == 1) pcost += fe.w_2row;
+                            else if (g > 1) pcost += fe.w_2day;
+                        }
+                    }
+                }
+                pcost += fe.period_pen[pid];
+                if (fe.large_exams.count(eid) && fe.fl_penalty > 0 && fe.last_periods.count(pid))
+                    pcost += fe.fl_penalty;
+
+                for (int rid : valid_r[eid]) {
+                    long long cost = pcost;
+                    if (sol.get_pr_enroll(pid, rid) + fe.exam_enroll[eid] > fe.room_cap[rid])
+                        cost += 100000;
+                    cost += fe.room_pen[rid];
+                    if (cost < best_cost) {
+                        second_cost = best_cost;
+                        best_cost = cost; bp = pid; br = rid;
+                    } else if (cost < second_cost) {
+                        second_cost = cost;
+                    }
+                }
+            }
+
+            double regret = second_cost - best_cost;
+            if (regret > max_regret) {
+                max_regret = regret; max_regret_exam = eid;
+                best_pid = bp; best_rid = br;
+            }
+        }
+
+        if (max_regret_exam >= 0 && best_pid >= 0) {
+            sol.assign(max_regret_exam, best_pid, best_rid);
+            unplaced.erase(std::remove(unplaced.begin(), unplaced.end(), max_regret_exam), unplaced.end());
+        } else {
+            break;
+        }
+    }
+
+    // Fallback for any remaining unplaced
+    if (!unplaced.empty())
+        repair_greedy(sol, fe, unplaced, valid_p, valid_r);
+}
+
 } // namespace alns_detail
 
 // ── Public interface ───────────────────────────────────────────
@@ -245,7 +383,7 @@ inline void repair_random(
 inline AlgoResult solve_alns(
     const ProblemInstance& prob,
     int max_iterations  = 2000,
-    double destroy_pct  = 0.15,
+    double destroy_pct  = 0.04,
     int seed            = 42,
     bool verbose        = false,
     const Solution* init_sol = nullptr)
@@ -316,15 +454,22 @@ inline AlgoResult solve_alns(
     double init_temp = temp;
     double cooling_rate = 0.999;
 
-    // Operator weights
-    std::vector<double> d_weights = {1.0, 1.0, 1.0};
-    std::vector<double> r_weights = {1.0, 1.0};
-    std::vector<double> d_scores = {0, 0, 0};
-    std::vector<double> r_scores = {0, 0};
-    std::vector<int> d_counts = {1, 1, 1};
-    std::vector<int> r_counts = {1, 1};
+    // Operator weights: random, worst, related, shaw, period-strip
+    std::vector<double> d_weights = {1.0, 1.0, 1.0, 1.0, 1.0};
+    std::vector<double> r_weights = {1.0, 1.0, 1.0}; // greedy, random, regret-2
+    std::vector<double> d_scores(5, 0);
+    std::vector<double> r_scores(3, 0);
+    std::vector<int> d_counts(5, 1);
+    std::vector<int> r_counts(3, 1);
+
+    // LAHC history for alternating acceptance
+    int lahc_len = std::max(ne / 10, 20);
+    std::vector<double> lahc_history(lahc_len, current_fitness);
+    bool use_lahc = false;
 
     std::uniform_real_distribution<double> unif(0.0, 1.0);
+
+    int current_hard = ev.hard();
 
     if (verbose)
         std::cerr << "[ALNS] Init: feasible=" << ev.feasible()
@@ -346,52 +491,93 @@ inline AlgoResult solve_alns(
             removed = destroy_random(sol, ne, n_destroy, rng);
         else if (d_op == 1)
             removed = destroy_worst(sol, fe, ne, n_destroy, rng);
-        else
+        else if (d_op == 2)
             removed = destroy_related(sol, prob, ne, n_destroy, rng);
+        else if (d_op == 3)
+            removed = destroy_shaw(sol, prob, ne, n_destroy, rng);
+        else
+            removed = destroy_period_strip(sol, ne, np, n_destroy, rng);
 
         // Repair
         if (r_op == 0)
             repair_greedy(sol, fe, removed, valid_p, valid_r);
-        else
+        else if (r_op == 1)
             repair_random(sol, removed, valid_p, valid_r, rng);
+        else
+            repair_regret2(sol, fe, removed, valid_p, valid_r);
 
-        // Evaluate
-        auto new_ev = fe.full_eval(sol);
-        double new_fitness = new_ev.fitness();
-        double delta = new_fitness - current_fitness;
-
-        bool accept = (delta < 0);
-        if (!accept && temp > 1e-10)
-            accept = (unif(rng) < std::exp(-delta / temp));
-
-        double score = 0.0;
-        if (accept) {
-            current_fitness = new_fitness;
-            score = 1.0;
-            bool nf = new_ev.feasible();
-            bool dominated = (best_feasible && !nf);
-            if (!dominated && new_fitness < best_fitness) {
-                best_sol = sol.copy();
-                best_fitness = new_fitness;
-                best_feasible = nf;
-                score = 3.0;
-                no_improve_alns = 0;
-                n_destroy = n_destroy_base;  // reset destroy size on improvement
-                if (verbose && (it < 10 || it % 200 == 0))
-                    std::cerr << "[ALNS] Iter " << it << ": best hard=" << new_ev.hard()
-                              << " soft=" << new_ev.soft() << std::endl;
-            } else {
-                no_improve_alns++;
+        // Local search polish on repaired exams (1 pass, light)
+        for (int eid : removed) {
+            const auto& vp = valid_p[eid];
+            const auto& vr = valid_r[eid];
+            if (vp.empty() || vr.empty()) continue;
+            for (int t = 0; t < 3; t++) {
+                int pid = vp[rng() % vp.size()];
+                int rid = vr[rng() % vr.size()];
+                if (pid == sol.period_of[eid] && rid == sol.room_of[eid]) continue;
+                double d = fe.move_delta(sol, eid, pid, rid);
+                if (d < -0.5) { fe.apply_move(sol, eid, pid, rid); break; }
             }
-        } else {
-            restore_state(sol, saved);
-            no_improve_alns++;
         }
 
-        // Adaptive destroy size: grow when stuck, cap at 40%
+        // Fast hard-violation check: skip full_eval when clearly worse
+        int new_hard = fe.count_hard_fast(sol);
+        bool fast_reject = false;
+        if (new_hard > current_hard) {
+            double hard_delta = (double)(new_hard - current_hard) * 100000.0;
+            if (temp < 1e-5 || std::exp(-hard_delta / temp) < 0.001)
+                fast_reject = true;
+        }
+
+        double score = 0.0;
+        if (fast_reject) {
+            restore_state(sol, saved);
+            no_improve_alns++;
+        } else {
+            auto new_ev = fe.full_eval(sol);
+            double new_fitness = new_ev.fitness();
+            double delta = new_fitness - current_fitness;
+
+            bool accept;
+            if (use_lahc) {
+                int hi = it % lahc_len;
+                accept = (new_fitness <= current_fitness) || (new_fitness <= lahc_history[hi]);
+                lahc_history[hi] = current_fitness;
+            } else {
+                accept = (delta < 0);
+                if (!accept && temp > 1e-10)
+                    accept = (unif(rng) < std::exp(-delta / temp));
+            }
+
+            if (accept) {
+                current_fitness = new_fitness;
+                current_hard = new_ev.hard();
+                score = 1.0;
+                bool nf = new_ev.feasible();
+                bool dominated = (best_feasible && !nf);
+                if (!dominated && new_fitness < best_fitness) {
+                    best_sol = sol.copy();
+                    best_fitness = new_fitness;
+                    best_feasible = nf;
+                    score = 3.0;
+                    no_improve_alns = 0;
+                    n_destroy = n_destroy_base;
+                    if (verbose && (it < 10 || it % 200 == 0))
+                        std::cerr << "[ALNS] Iter " << it << ": best hard=" << new_ev.hard()
+                                  << " soft=" << new_ev.soft() << std::endl;
+                } else {
+                    no_improve_alns++;
+                }
+            } else {
+                restore_state(sol, saved);
+                no_improve_alns++;
+            }
+        }
+
+        // Adaptive destroy size: grow when stuck, cap at 12%
         if (no_improve_alns > 0 && no_improve_alns % 100 == 0) {
-            n_destroy = std::min(std::max(1, (int)(ne * 0.4)),
-                                 n_destroy + std::max(1, ne / 20));
+            n_destroy = std::min(std::max(1, (int)(ne * 0.12)),
+                                 n_destroy + std::max(1, ne / 50));
         }
 
         d_scores[d_op] += score;
@@ -400,11 +586,11 @@ inline AlgoResult solve_alns(
         r_counts[r_op]++;
 
         if ((it + 1) % 100 == 0) {
-            for (int i = 0; i < 3; i++) {
+            for (int i = 0; i < 5; i++) {
                 d_weights[i] = std::max(0.1, 0.7 * d_weights[i] + 0.3 * d_scores[i] / d_counts[i]);
                 d_scores[i] = 0; d_counts[i] = 1;
             }
-            for (int i = 0; i < 2; i++) {
+            for (int i = 0; i < 3; i++) {
                 r_weights[i] = std::max(0.1, 0.7 * r_weights[i] + 0.3 * r_scores[i] / r_counts[i]);
                 r_scores[i] = 0; r_counts[i] = 1;
             }
@@ -412,9 +598,12 @@ inline AlgoResult solve_alns(
 
         temp *= cooling_rate;
 
-        // Reheat when stuck
-        if ((it + 1) % 200 == 0 && current_fitness >= best_fitness)
-            temp = std::max(temp, init_temp * 0.3);
+        // Toggle SA/LAHC acceptance every 200 iters
+        if ((it + 1) % 200 == 0) {
+            use_lahc = !use_lahc;
+            if (current_fitness >= best_fitness)
+                temp = std::max(temp, init_temp * 0.3);
+        }
     }
 
     fe.optimize_rooms(best_sol);

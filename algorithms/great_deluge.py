@@ -1,6 +1,4 @@
 """
-Great Deluge Algorithm
-======================
 Level-based acceptance: accepts any move where new fitness <= level.
 Level decreases linearly from initial fitness.
 Raises level when stuck to escape local optima.

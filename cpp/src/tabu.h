@@ -1,9 +1,14 @@
 /*
- * tabu.h — Feasibility-First Tabu Search
+ * Feasibility-first tabu search.
  *
  * Starts from DSatur greedy, optimizes with move_delta.
- * Re-syncs with full_eval every 10 iterations.
+ * Re-syncs with full_eval every 50 iterations.
  * When infeasible: focuses on hard-violating exams + swap moves.
+ *
+ * 120-exam candidate list via cost-weighted AliasTable sampling.
+ * Kempe chain moves through kempe_detail (shared with kempe.h).
+ * Strategic oscillation — deliberate infeasibility crossing when stuck.
+ * Token-ring diversification via visit counting.
  */
 
 #pragma once
@@ -11,9 +16,11 @@
 #include "models.h"
 #include "evaluator.h"
 #include "greedy.h"
+#include "neighbourhoods.h"
 
 #include <algorithm>
 #include <chrono>
+#include <climits>
 #include <numeric>
 #include <random>
 #include <set>
@@ -72,6 +79,7 @@ inline AlgoResult solve_tabu(
     auto tabu_key = [&](int eid, int pid) -> int64_t { return (int64_t)eid * np + pid; };
 
     int no_improve = 0;
+    int base_tenure = tabu_tenure;
 
     // ── Find hard-violating exams ──
     auto get_bad = [&]() -> std::set<int> {
@@ -94,30 +102,65 @@ inline AlgoResult solve_tabu(
         return bad;
     };
 
+    // Per-exam cost for weighted candidate selection
+    std::vector<double> tabu_exam_cost(ne, 1.0);
+    AliasTable tabu_alias;
+    auto recompute_tabu_costs = [&]() {
+        for (int e = 0; e < ne; e++) {
+            int pid = sol.period_of[e]; if (pid < 0) { tabu_exam_cost[e] = 1.0; continue; }
+            double c = 1.0;
+            for (auto& [nb, _] : prob.adj[e]) {
+                int np2 = sol.period_of[nb]; if (np2 < 0) continue;
+                if (np2 == pid) c += 100000;
+                int gap = std::abs(pid - np2);
+                if (gap > 0 && gap <= fe.w_spread) c += 1;
+                if (fe.period_day[pid] == fe.period_day[np2]) {
+                    int g = std::abs(fe.period_daypos[pid] - fe.period_daypos[np2]);
+                    if (g == 1) c += fe.w_2row;
+                    else if (g > 1) c += fe.w_2day;
+                }
+            }
+            tabu_exam_cost[e] = c;
+        }
+        tabu_alias.build(tabu_exam_cost);
+    };
+    recompute_tabu_costs();
+
+    // Visit counting for token-ring diversification
+    std::vector<std::vector<int>> visit_count(ne, std::vector<int>(np, 0));
+
+    std::uniform_int_distribution<int> de(0, ne - 1);
+
     // ── Main loop ──
     int iters_done = 0;
     for (int it = 0; it < max_iterations; it++) {
         iters_done = it + 1;
 
-        // Re-sync every 10 iterations
-        if (it % 10 == 0) {
+        // Re-sync periodically to correct delta drift
+        if (it % 50 == 0) {
             ev = fe.full_eval(sol);
             current_fitness = ev.fitness();
         }
 
+        // Adaptive tenure: grow when stuck
+        int active_tenure = base_tenure + (no_improve / 100) * 5;
+        active_tenure = std::min(active_tenure, base_tenure * 3);
+
+        // Recompute costs periodically
+        if (it % 200 == 0) recompute_tabu_costs();
+
         auto bad = get_bad();
 
-        // Build candidate list
+        // Build candidate list: all bad exams + cost-weighted sample
         std::vector<int> candidates;
+        std::vector<bool> in_cands(ne, false);
         if (!bad.empty()) {
-            candidates.assign(bad.begin(), bad.end());
-            std::uniform_int_distribution<int> de(0, ne - 1);
-            for (int i = 0; i < std::min(20, ne); i++) candidates.push_back(de(rng));
-        } else {
-            candidates.resize(ne);
-            std::iota(candidates.begin(), candidates.end(), 0);
-            std::shuffle(candidates.begin(), candidates.end(), rng);
-            if ((int)candidates.size() > 60) candidates.resize(60);
+            for (int e : bad) { candidates.push_back(e); in_cands[e] = true; }
+        }
+        int n_extra = std::max(60, 120 - (int)candidates.size());
+        for (int i = 0; i < n_extra * 2 && (int)candidates.size() < 120; i++) {
+            int e = tabu_alias.sample(rng);
+            if (!in_cands[e]) { candidates.push_back(e); in_cands[e] = true; }
         }
 
         // Find best single move
@@ -137,14 +180,24 @@ inline AlgoResult solve_tabu(
                 tgts = targets;
             }
 
+            int enr_e = exam_enr[eid];
+            bool is_tabu = tabu.count(tabu_key(eid, cp)) &&
+                           tabu[tabu_key(eid, cp)] > it;
+
             for (int pid : tgts) {
                 if (pid == cp) continue;
+                // Period-only delta: student loop once per period
+                auto pd = fe.move_delta_period(sol, eid, pid);
+                // Room scan: O(nr), no student loop
                 auto& rooms = valid_r[eid];
                 for (int ri = 0; ri < (int)rooms.size(); ri++) {
                     int rid = rooms[ri];
-                    double d = fe.move_delta(sol, eid, pid, rid);
-                    bool is_tabu = tabu.count(tabu_key(eid, cp)) &&
-                                   tabu[tabu_key(eid, cp)] > it;
+                    double dh = pd.dh, ds = pd.ds;
+                    int new_total = sol.get_pr_enroll(pid, rid);
+                    dh += (((new_total + enr_e) > room_cap[rid]) ? 1.0 : 0.0) -
+                          ((new_total > room_cap[rid]) ? 1.0 : 0.0);
+                    ds += fe.room_pen[rid];
+                    double d = dh * 100000.0 + ds;
                     if (is_tabu && (current_fitness + d) >= best_fitness) continue;
                     if (d < bdelta) { bdelta = d; beid = eid; bpid = pid; brid = rid; }
                 }
@@ -188,8 +241,8 @@ inline AlgoResult solve_tabu(
                 fe.apply_move(sol, sea, sepb, sera);
                 fe.apply_move(sol, seb, sepa, serb);
                 current_fitness += best_swap_d;
-                tabu[tabu_key(sea, opa)] = it + tabu_tenure;
-                tabu[tabu_key(seb, opb)] = it + tabu_tenure;
+                tabu[tabu_key(sea, opa)] = it + active_tenure;
+                tabu[tabu_key(seb, opb)] = it + active_tenure;
                 beid = -2; // signal swap applied
             }
 
@@ -200,11 +253,48 @@ inline AlgoResult solve_tabu(
             }
         }
 
+        // ── Kempe chain move ──
+        // Try when stuck or infeasible; uses shared kempe_detail infrastructure
+        if ((no_improve > 50 || !bad.empty()) && beid != -2) {
+            for (int kc = 0; kc < 3; kc++) {
+                int kseed = tabu_alias.sample(rng);
+                int kp1 = sol.period_of[kseed]; if (kp1 < 0) continue;
+                int kp2 = std::uniform_int_distribution<int>(0, np - 1)(rng);
+                if (kp2 == kp1) continue;
+
+                auto chain = kempe_detail::build_chain(sol, prob.adj, ne, kseed, kp1, kp2);
+                if (chain.empty() || (int)chain.size() > ne / 4) continue;
+
+                auto old_pe = fe.partial_eval(sol, chain);
+                auto undo_info = kempe_detail::apply_chain(sol, chain, kp1, kp2);
+                auto new_pe = fe.partial_eval(sol, chain);
+                double kd = new_pe.fitness() - old_pe.fitness();
+
+                // Check tabu: any chain member tabu?
+                bool any_tabu = false;
+                for (auto& u : undo_info)
+                    if (tabu.count(tabu_key(u.eid, u.old_pid)) && tabu[tabu_key(u.eid, u.old_pid)] > it)
+                        { any_tabu = true; break; }
+
+                bool aspiration = (current_fitness + kd < best_fitness);
+                if ((!any_tabu || aspiration) && kd < bdelta) {
+                    // Accept Kempe — already applied
+                    for (auto& u : undo_info) tabu[tabu_key(u.eid, u.old_pid)] = it + active_tenure;
+                    current_fitness += kd;
+                    beid = -3; // signal kempe applied
+                    break;
+                } else {
+                    kempe_detail::undo_chain(sol, undo_info);
+                }
+            }
+        }
+
         if (beid >= 0) {
             int op = sol.period_of[beid];
             fe.apply_move(sol, beid, bpid, brid);
             current_fitness += bdelta;
-            tabu[tabu_key(beid, op)] = it + tabu_tenure;
+            tabu[tabu_key(beid, op)] = it + active_tenure;
+            visit_count[beid][bpid]++;
         }
 
         // Track best — verify with full_eval, feasibility-first
@@ -231,18 +321,36 @@ inline AlgoResult solve_tabu(
             if (no_improve > patience) break;
         }
 
-        // Perturbation
+        // Strategic oscillation: deliberate infeasibility crossing when stuck
         if (no_improve > 0 && no_improve % std::max(100, patience / 4) == 0) {
-            std::uniform_int_distribution<int> de(0, ne-1);
-            for (int k = 0; k < 3; k++) {
+            int osc_iters = 20 + (rng() % 30);
+            for (int oi = 0; oi < osc_iters; oi++) {
                 int e = de(rng);
                 if (!valid_p[e].empty() && !valid_r[e].empty()) {
                     int p = valid_p[e][rng() % valid_p[e].size()];
                     int r = valid_r[e][rng() % valid_r[e].size()];
-                    fe.apply_move(sol, e, p, r);
+                    double d = fe.move_delta(sol, e, p, r);
+                    if (d < 0) fe.apply_move(sol, e, p, r);
                 }
             }
-            current_fitness = fe.full_eval(sol).fitness();
+            ev = fe.full_eval(sol);
+            current_fitness = ev.fitness();
+        }
+
+        // Token-ring diversification: force move to least-visited slot when deeply stuck
+        if (no_improve > patience / 2) {
+            int e = tabu_alias.sample(rng);
+            int min_visits = INT_MAX, best_p = -1;
+            for (int p : valid_p[e]) {
+                if (visit_count[e][p] < min_visits) { min_visits = visit_count[e][p]; best_p = p; }
+            }
+            if (best_p >= 0 && best_p != sol.period_of[e]) {
+                int r = valid_r[e].empty() ? 0 : valid_r[e][rng() % valid_r[e].size()];
+                fe.apply_move(sol, e, best_p, r);
+                visit_count[e][best_p]++;
+                ev = fe.full_eval(sol);
+                current_fitness = ev.fitness();
+            }
         }
     }
 
