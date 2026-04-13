@@ -41,11 +41,12 @@ Twelve algorithms are implemented in a single C++20 solver, with a Python bridge
 ## Quick start
 
 ```bash
-make                                            # build the C++ solver
+python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
+make                                            # build the C++ solver
 python3 main.py --dataset instances/exam_comp_set4.exam
 ```
-
+<p align="center"><sub>Full guide is below in the Usage and CLI Reference.</sub></p>
 That runs every algorithm on set4 (273 exams — small and fast) and drops output into a new batch under `results/`. For interactive tinkering, open `exam_scheduling.ipynb`.
 
 ---
