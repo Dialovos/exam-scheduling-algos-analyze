@@ -1,38 +1,54 @@
-<p align="center">
-  <img src="graphs/algo_radar.png" width="420"/>
-</p>
-
 <h1 align="center">Exam Scheduling</h1>
 
 <p align="center">
-  Metaheuristic comparison on the ITC 2007 Capacitated Examination Timetabling Problem
+  <b>Hoang Le</b> &nbsp;·&nbsp; <b>Ian Cronin</b>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/C%2B%2B-20-00599C?style=flat-square&logo=cplusplus" alt="C++20"/>
-  <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.10+"/>
-  <img src="https://img.shields.io/badge/Benchmark-ITC%202007-8B6914?style=flat-square" alt="ITC 2007"/>
-  <img src="https://img.shields.io/badge/Algorithms-12-2E8B57?style=flat-square" alt="12 Algorithms"/>
+  <i>Twelve algorithms, one C++ solver, eight ITC 2007 datasets —<br/>
+  all fighting over where to put next semester's exams.</i>
 </p>
 
-<br/>
+<p align="center">
+  <img src="graphs/algo_bars.png" width="860"/>
+</p>
 
-Twelve optimization algorithms — constructive, local search, population-based, and exact — compiled into a single C++ solver and benchmarked on all eight [ITC 2007](https://www.eeecs.qub.ac.uk/itc2007/examtrack/) datasets. Python fallbacks available when the binary is unavailable.
-
-> **Contributors** &ensp; Hoang Le &ensp;·&ensp; Ian Cronin
+<p align="center"><sub>Soft penalty, runtime, and peak memory — mean with error bars across all 8 datasets.</sub></p>
 
 ---
 
-## Problem
+## Table of Contents
+- [The Problem & Approach](#the-problem--approach)
+- [Quick Start](#quick-start)
+- [The Algorithms](#the-algorithms)
+- [Datasets](#datasets)
+- [Performance Results](#performance-results)
+- [Auto-Tuner Pipeline](#auto-tuner-pipeline)
+- [Usage & CLI Reference](#usage--cli-reference)
+- [GenAI Usage Disclosure](#genai-usage-disclosure)
+- [References](#references)
 
-The Capacitated Examination Timetabling Problem is NP-hard (graph-coloring variant). Given exams, students, time slots, and rooms with limited seating:
+---
 
-- Assign every exam to exactly one (period, room) pair
-- Hard constraints: no student sits two exams in the same period; room capacity respected; exam fits the period length
-- Soft constraints: penalize back-to-back exams, same-day exams, exams too close together, mixed-duration rooms, and large exams late in the schedule
-- Fitness: `hard_violations * 100000 + soft_penalty` (feasibility-first)
+## Abstract
 
-Exams are vertices, edges connect any pair sharing at least one student. No polynomial-time algorithm is known — everything here is heuristic or metaheuristic.
+The problem this project tackles is the Capacitated Examination Timetabling Problem: given a finite set of exams, students, available time slots, and rooms with limited seating, assign every exam to exactly one (time slot, room) pair so that hard constraints are satisfied while minimizing soft constraint penalties. Hard constraints ensure no student sits two exams in the same period and no room exceeds capacity. Soft constraints penalize back-to-back scheduling, same-day exams, exams too close together, mixed-duration rooms, and large exams late in the schedule. Fitness is computed as `hard_violations * 100000 + soft_penalty` — feasibility always comes first.
+
+The problem is NP-hard. It follows the graph-coloring formulation: exams are vertices, edges connect any pair sharing at least one student. No polynomial-time algorithm is known, which means exponential worst-case behavior without a heuristic approach.
+
+Twelve algorithms are implemented in a single C++20 solver, with a Python bridge that falls back gracefully when the binary isn't built. An auto-tuner hunts for better defaults across datasets, and a plotting module generates figures for analysis. Everything runs against the [ITC 2007 Examination Track](https://www.eeecs.qub.ac.uk/itc2007/examtrack/) benchmark and a synthetic instance generator.
+
+## Quick start
+
+```bash
+make                                            # build the C++ solver
+pip install -r requirements.txt
+python3 main.py --dataset instances/exam_comp_set4.exam
+```
+
+That runs every algorithm on set4 (273 exams — small and fast) and drops output into a new batch under `results/`. For interactive tinkering, open `exam_scheduling.ipynb`.
+
+---
 
 ## Algorithms
 
@@ -51,7 +67,20 @@ Exams are vertices, edges connect any pair sharing at least one student. No poly
 | 11 | CP-SAT | Exact | Constraint programming via OR-Tools CP-SAT |
 | 12 | GVNS | Hybrid | General Variable Neighbourhood Search with SA acceptance |
 
-Delta evaluation (`move_delta()`, O(k) per move instead of O(n^2) full eval) drives every local search. Swap moves expand the neighbourhood by exchanging periods of two exams at once. A steepest-descent room post-processing pass runs on every final solution. Warm-start chaining (`--init-solution`) pipes one algorithm's output into the next.
+All algorithms run through one C++ binary. Python fallbacks exist for algorithms 1-8 when the binary is unavailable.
+
+<p align="center">
+  <img src="graphs/algo_radar.png" width="560"/>
+</p>
+
+<p align="center"><sub>Performance profile — memory, runtime, soft penalty, and individual constraint components. Smaller area is better.</sub></p>
+
+### What makes them fast
+
+- Delta evaluation — `move_delta()` is O(k) instead of O(n^2) full eval per move. This is the single biggest speedup and every local search leans on it.
+- Swap moves — SA, LAHC, and GD expand their neighbourhood by exchanging the periods of two exams at once.
+- Room post-processing — `optimize_rooms()` runs a steepest-descent room reassignment on the final solution.
+- Warm-start chaining — `--init-solution` pipes one algorithm's output into the next (e.g. SA -> Kempe -> GD), so later stages start from a better place.
 
 ## Datasets
 
@@ -72,63 +101,87 @@ All sourced from the [ITC 2007 Examination Track](https://www.eeecs.qub.ac.uk/it
 
 ## Results
 
-### Aggregate performance
+<p align="center">
+  <img src="graphs/algo_heatmap.png" width="860"/>
+</p>
+
+<p align="center"><sub>Cross-dataset soft penalty heatmap. Rows are algorithms, columns are datasets sorted by size. Cell values are actual soft penalties; color encodes relative standing (green = best, red = worst).</sub></p>
+
+<br/>
+
+GVNS and Kempe hold up across the board. The tightly-constrained sets (set3, set5, set7) punish anything that can't reason carefully about room capacity — GD and ALNS struggle there while the others stay relatively stable.
+
+<br/>
 
 <table>
 <tr>
 <td width="50%">
-<p align="center"><b>Soft penalty · Runtime · Memory</b></p>
-<img src="graphs/algo_bars.png" width="100%"/>
-<p align="center"><sub>Mean with error bars across all eight datasets</sub></p>
+<p align="center">
+  <img src="graphs/algo_scatter.png" width="100%"/>
+</p>
+<p align="center"><sub>Quality vs runtime trade-off. Bottom-left is the sweet spot — fast and low penalty.</sub></p>
 </td>
 <td width="50%">
-<p align="center"><b>Soft penalty distribution</b></p>
-<img src="graphs/algo_boxes.png" width="100%"/>
-<p align="center"><sub>Box plot spread across datasets per algorithm</sub></p>
+<p align="center">
+  <img src="graphs/algo_boxes.png" width="100%"/>
+</p>
+<p align="center"><sub>Soft penalty distribution across datasets. Tight boxes mean consistent performance.</sub></p>
 </td>
 </tr>
 </table>
 
-### Multi-dimensional view
+<br/>
 
-<table>
-<tr>
-<td width="50%">
-<p align="center"><b>Per-dataset heatmap</b></p>
-<img src="graphs/algo_heatmap.png" width="100%"/>
-<p align="center"><sub>Normalized soft penalty, algorithms x datasets. Cell values are actual penalties.</sub></p>
-</td>
-<td width="50%">
-<p align="center"><b>Performance profile</b></p>
-<img src="graphs/algo_radar.png" width="100%"/>
-<p align="center"><sub>Memory, runtime, soft penalty, and constraint components. Smaller = better.</sub></p>
-</td>
-</tr>
-</table>
+### Per-dataset breakdown
 
-### Quality vs cost
+<p align="center">
+  <img src="graphs/summary_lines.png" width="860"/>
+</p>
 
-<table>
-<tr>
-<td width="50%">
-<p align="center"><b>Runtime vs soft penalty</b></p>
-<img src="graphs/algo_scatter.png" width="100%"/>
-<p align="center"><sub>Bottom-left is the sweet spot</sub></p>
-</td>
-<td width="50%">
-<p align="center"><b>Per-dataset trends</b></p>
-<img src="graphs/summary_lines.png" width="100%"/>
-<p align="center"><sub>Soft penalty, runtime, and peak memory across all sets</sub></p>
-</td>
-</tr>
-</table>
+<p align="center"><sub>Soft penalty, runtime, and peak memory traced across all eight datasets per algorithm.</sub></p>
+
+<br/>
 
 ### Scalability
 
 <p align="center">
-  <img src="graphs/scan_smoke.png" width="75%"/>
+  <img src="graphs/scan_smoke.png" width="780"/>
 </p>
-<p align="center"><sub>Chain(SA, Kempe, GD) quality and cost vs synthetic instance size</sub></p>
+
+<p align="center"><sub>Chain(SA, Kempe, GD) on synthetic instances from 25 to 200 exams. Quality on the left, runtime and peak memory on the right.</sub></p>
+
+---
+
+## Auto-tuner
+
+Automated parameter optimization and algorithm-chain discovery. Supports single-dataset tuning or global multi-dataset mode to avoid overfitting.
+
+```bash
+# Single dataset
+python3 -m tooling.auto_tuner instances/exam_comp_set4.exam
+
+# Global — all ITC 2007 sets
+python3 -m tooling.auto_tuner --all-sets
+python3 -m tooling.auto_tuner --all-sets --max-time 20      # 20 min budget
+python3 -m tooling.auto_tuner --all-sets --resume            # resume from checkpoint
+```
+
+The pipeline runs in four phases:
+
+1. Quick screen — all algorithms on all datasets in parallel.
+2. Parameter tuning — random + perturbation sampling on a representative subset (small / medium / large auto-picked).
+3. Chain discovery — tournament over warm-started algorithm chains, evaluated across datasets. The winning chain lands in `tuned_params.json`.
+4. Final validation — multi-seed on every dataset.
+
+> [!NOTE]
+> In global mode, scores are normalized per-dataset and aggregated via geometric mean. A config that's great on set4 but terrible on set1 loses to one that's merely solid across both. Every update is gated: aggregate must improve, trial counts must be comparable, and no single dataset can regress more than 15%.
+
+Winning parameters are auto-saved to `tooling/tuned_params.json` with version history for rollback.
+
+```bash
+python3 main.py --show-params              # active defaults + version history
+python3 main.py --rollback-params 2        # restore version 2 from log
+```
 
 ---
 
@@ -140,21 +193,12 @@ All sourced from the [ITC 2007 Examination Track](https://www.eeecs.qub.ac.uk/it
 - Python 3.10+
 - pip packages: see `requirements.txt`
 
-### Quick start
+### Setup
 
 ```bash
-# Python environment
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-
-# Build the C++ solver
 make
-
-# Run all algorithms on a dataset
-python3 main.py --dataset instances/exam_comp_set4.exam
-
-# Or open the notebook
-jupyter notebook exam_scheduling.ipynb
 ```
 
 ### CLI examples
@@ -208,22 +252,6 @@ python3 main.py --show-params
 | `--rollback-params V` | Rollback tuned params to version V and exit |
 
 </details>
-
-## Auto-tuner
-
-Automated parameter optimization and algorithm-chain discovery. Supports single-dataset tuning or global multi-dataset mode to avoid overfitting.
-
-```bash
-# Single dataset
-python3 -m tooling.auto_tuner instances/exam_comp_set4.exam
-
-# Global — all ITC 2007 sets (recommended)
-python3 -m tooling.auto_tuner --all-sets
-python3 -m tooling.auto_tuner --all-sets --max-time 20    # 20 min budget
-python3 -m tooling.auto_tuner --all-sets --resume          # resume from checkpoint
-```
-
-Runs in phases: quick screen, parameter tuning, chain discovery, final validation. Winning parameters are saved to `tooling/tuned_params.json` with version history for rollback.
 
 <details>
 <summary>Project structure</summary>
@@ -288,7 +316,7 @@ exam-scheduling/
 
 ## GenAI usage disclosure
 
-AI-assisted coding (Claude) was used throughout development for algorithm implementation, debugging, and code refactoring. Experimental design, benchmarking methodology, parameter choices, and technical writing were done by the human authors.
+AI-assisted coding was used throughout development for algorithm implementation, debugging, and code refactoring. Experimental design, benchmarking, parameter choices, and writing were done by non-AI enity.
 
 ## References
 
