@@ -1,6 +1,4 @@
 """
-Kempe Chain Local Search
-========================
 Swaps exams between two periods along conflict chains,
 preserving period-conflict feasibility by construction.
 Uses full_eval for chain assessment (chains can be large).

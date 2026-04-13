@@ -1,7 +1,6 @@
 /*
- * models.h — Data structures for Exam Timetabling
- *
- * Exam, Period, Room, ProblemInstance, Solution, constraints, weightings.
+ * Exam, Period, Room, ProblemInstance, Solution, constraint, and weighting
+ * structs. ProblemInstance::build_derived() builds adjacency + conflict data.
  */
 
 #pragma once
@@ -12,7 +11,6 @@
 #include <numeric>
 #include <set>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 // ============================================================
@@ -138,7 +136,8 @@ struct Solution {
     int n_e = 0, n_p = 0, n_r = 0;
     std::vector<int> period_of;  // -1 = unassigned
     std::vector<int> room_of;    // -1 = unassigned
-    std::unordered_map<int64_t, int> pr_enroll; // (period*n_r + room) -> total enrollment
+    std::vector<int> pr_enroll;  // flat [period * n_r + room] -> total enrollment
+    std::vector<int> pr_count;   // flat [period * n_r + room] -> exam count (for room_exclusive)
     std::vector<int> enroll_cache;
     const ProblemInstance* prob = nullptr;
 
@@ -149,19 +148,23 @@ struct Solution {
         n_e = p.n_e(); n_p = p.n_p(); n_r = p.n_r();
         period_of.assign(n_e, -1);
         room_of.assign(n_e, -1);
-        pr_enroll.clear();
+        pr_enroll.assign(n_p * n_r, 0);
+        pr_count.assign(n_p * n_r, 0);
         enroll_cache.resize(n_e);
         for (int i = 0; i < n_e; i++)
             enroll_cache[i] = p.exams[i].enrollment();
     }
 
-    int64_t pr_key(int pid, int rid) const {
-        return (int64_t)pid * n_r + rid;
+    int pr_key(int pid, int rid) const {
+        return pid * n_r + rid;
     }
 
     int get_pr_enroll(int pid, int rid) const {
-        auto it = pr_enroll.find(pr_key(pid, rid));
-        return it == pr_enroll.end() ? 0 : it->second;
+        return pr_enroll[pr_key(pid, rid)];
+    }
+
+    int get_pr_count(int pid, int rid) const {
+        return pr_count[pr_key(pid, rid)];
     }
 
     void assign(int eid, int pid, int rid) {
@@ -169,11 +172,15 @@ struct Solution {
         int old_pid = period_of[eid];
         if (old_pid >= 0) {
             int old_rid = room_of[eid];
-            pr_enroll[pr_key(old_pid, old_rid)] -= enr;
+            int key = pr_key(old_pid, old_rid);
+            pr_enroll[key] -= enr;
+            pr_count[key]--;
         }
         period_of[eid] = pid;
         room_of[eid] = rid;
-        pr_enroll[pr_key(pid, rid)] += enr;
+        int key = pr_key(pid, rid);
+        pr_enroll[key] += enr;
+        pr_count[key]++;
     }
 
     Solution copy() const {
@@ -182,6 +189,7 @@ struct Solution {
         s.period_of = period_of;
         s.room_of = room_of;
         s.pr_enroll = pr_enroll;
+        s.pr_count = pr_count;
         s.prob = prob;
         s.enroll_cache = enroll_cache;
         return s;

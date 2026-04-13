@@ -1,5 +1,5 @@
 """
-Research-quality plotting for exam scheduling experiments.
+Plotting for exam scheduling experiments.
 
 Chart types:
   1. Algorithm comparison (horizontal bars)
@@ -29,7 +29,9 @@ __all__ = [
     'plot_parameter_sensitivity', 'plot_summary_dashboard',
     'plot_box_comparison', 'plot_radar', 'plot_rank_table',
     'plot_convergence', 'plot_line_across_datasets', 'plot_soft_lines',
-    'plot_continuous_scan',
+    'plot_continuous_scan', 'plot_experiment_summary',
+    'plot_algo_bars', 'plot_algo_boxes', 'plot_algo_radar', 'plot_algo_scatter',
+    'plot_algo_heatmap',
     'generate_all_plots', 'plot_soft_constraint_breakdown',
 ]
 
@@ -44,35 +46,46 @@ except ImportError:
 
 # ── Colorblind-friendly palette for all algorithms ───────────────────────────
 ALGO_COLORS = {
-    'Greedy':              '#4E79A7',
-    'Tabu Search':         '#F28E2B',
-    'HHO':                 '#E15759',
-    'Kempe Chain':         '#76B7B2',
-    'Simulated Annealing': '#59A14F',
-    'ALNS':                '#EDC948',
-    'Great Deluge':        '#B07AA1',
-    'ABC':                 '#FF9DA7',
-    'Genetic Algorithm':   '#9C755F',
-    'LAHC':                '#BAB0AC',
-    'Natural Selection':   '#4B0082',
-    'IP':                  '#D37295',
+    'Greedy':                  '#4E79A7',
+    'Feasibility':             '#7B7B7B',
+    'Tabu Search':             '#F28E2B',
+    'Kempe Chain':             '#76B7B2',
+    'Simulated Annealing':     '#59A14F',
+    'Multi-Neighbourhood SA':  '#59A14F',
+    'ALNS':                    '#EDC948',
+    'Great Deluge':            '#B07AA1',
+    'ABC':                     '#FF9DA7',
+    'Genetic Algorithm':       '#9C755F',
+    'LAHC':                    '#BAB0AC',
+    'WOA':                     '#E15759',
+    'HHO':                     '#E15759',
+    'CP-SAT':                  '#D37295',
+    'CP-SAT B&B':              '#D37295',
+    'GVNS':                    '#4B0082',
 }
 ALGO_MARKERS = {
-    'Greedy': 'o', 'Tabu Search': '^', 'HHO': 'D', 'Kempe Chain': 'v',
-    'Simulated Annealing': 's', 'ALNS': 'P', 'Great Deluge': 'X',
+    'Greedy': 'o', 'Feasibility': 'o',
+    'Tabu Search': '^', 'Kempe Chain': 'v',
+    'Simulated Annealing': 's', 'Multi-Neighbourhood SA': 's',
+    'ALNS': 'P', 'Great Deluge': 'X',
     'ABC': 'h', 'Genetic Algorithm': 'p', 'LAHC': 'H',
-    'Natural Selection': '*', 'IP': 'd',
+    'WOA': 'D', 'HHO': 'D',
+    'CP-SAT': 'd', 'CP-SAT B&B': 'd', 'GVNS': '*',
 }
 ALGO_SHORT = {
-    'Greedy': 'Greedy', 'Tabu Search': 'Tabu', 'HHO': 'HHO',
-    'Kempe Chain': 'Kempe', 'Simulated Annealing': 'SA',
+    'Greedy': 'Greedy', 'Feasibility': 'Feas',
+    'Tabu Search': 'Tabu', 'Kempe Chain': 'Kempe',
+    'Simulated Annealing': 'SA', 'Multi-Neighbourhood SA': 'SA',
     'ALNS': 'ALNS', 'Great Deluge': 'GD',
     'ABC': 'ABC', 'Genetic Algorithm': 'GA', 'LAHC': 'LAHC',
-    'Natural Selection': 'NS', 'IP': 'IP',
+    'WOA': 'WOA', 'HHO': 'HHO',
+    'CP-SAT': 'CP-SAT', 'CP-SAT B&B': 'CP-SAT', 'GVNS': 'GVNS',
 }
-ALGO_ORDER = ['Greedy', 'Tabu Search', 'HHO', 'Kempe Chain',
-              'Simulated Annealing', 'ALNS', 'Great Deluge',
-              'ABC', 'Genetic Algorithm', 'LAHC', 'Natural Selection', 'IP']
+ALGO_ORDER = ['Greedy', 'Feasibility', 'Tabu Search', 'Kempe Chain',
+              'Simulated Annealing', 'Multi-Neighbourhood SA',
+              'ALNS', 'Great Deluge',
+              'ABC', 'Genetic Algorithm', 'LAHC',
+              'WOA', 'HHO', 'CP-SAT', 'CP-SAT B&B', 'GVNS']
 
 SOFT_KEYS   = ['two_in_a_row', 'two_in_a_day', 'period_spread',
                'non_mixed_durations', 'front_load', 'period_penalty', 'room_penalty']
@@ -835,13 +848,16 @@ def plot_continuous_scan(df, x_col='num_exams', title=None, save_path=None):
     ax_r.grid(True, alpha=0.3)
 
     ax_r2 = ax_r.twinx()
-    l2 = ax_r2.plot(x, grouped['mem_mean'], '-s', color=mem_color,
-                    linewidth=2.2, markersize=7, label='Peak Memory (MB)')
+    mscale, munit, _ = _mem_unit(grouped['mem_mean'].tolist())
+    mem_scaled = grouped['mem_mean'] * mscale
+    mem_std_scaled = grouped['mem_std'] * mscale
+    l2 = ax_r2.plot(x, mem_scaled, '-s', color=mem_color,
+                    linewidth=2.2, markersize=7, label=f'Peak Memory ({munit})')
     ax_r2.fill_between(x,
-                       grouped['mem_mean'] - grouped['mem_std'],
-                       grouped['mem_mean'] + grouped['mem_std'],
+                       mem_scaled - mem_std_scaled,
+                       mem_scaled + mem_std_scaled,
                        color=mem_color, alpha=0.2)
-    ax_r2.set_ylabel('Peak Memory (MB)', color=mem_color)
+    ax_r2.set_ylabel(f'Peak Memory ({munit})', color=mem_color)
     ax_r2.tick_params(axis='y', labelcolor=mem_color)
     ax_r2.grid(False)
 
@@ -856,6 +872,577 @@ def plot_continuous_scan(df, x_col='num_exams', title=None, save_path=None):
     fig.tight_layout()
     _save(fig, save_path)
     return fig
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Interactive experiment summary (Plotly)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _hex_to_rgba(hex_color, alpha=0.15):
+    h = hex_color.lstrip('#')
+    if len(h) == 3:
+        h = h[0]*2 + h[1]*2 + h[2]*2
+    return f'rgba({int(h[:2],16)},{int(h[2:4],16)},{int(h[4:6],16)},{alpha})'
+
+_PLOTLY_MARKERS = {
+    'o': 'circle', '^': 'triangle-up', 'v': 'triangle-down',
+    's': 'square', 'P': 'cross', 'X': 'x', 'h': 'hexagon',
+    'p': 'pentagon', 'H': 'hexagon2', 'D': 'diamond',
+    'd': 'diamond-wide', '*': 'star',
+}
+
+def _save_plotly(fig, save_path):
+    """Save a Plotly figure — HTML (no deps) or image (needs kaleido)."""
+    if save_path.endswith('.html'):
+        fig.write_html(save_path, include_plotlyjs='cdn')
+    else:
+        fig.write_image(save_path)
+
+
+def _mem_unit(mb_values):
+    """Pick best memory unit based on max value. Returns (scale, label, fmt)."""
+    mx = max(mb_values) if mb_values else 0
+    if mx >= 1.0:
+        return 1.0, 'MB', '.1f'
+    if mx >= 0.001:
+        return 1024.0, 'KB', '.0f'
+    return 1024.0 * 1024.0, 'B', '.0f'
+
+
+def plot_experiment_summary(df, save_path=None):
+    """Interactive summary: soft penalty, runtime, and memory across datasets.
+
+    Three-panel line chart with categorical (evenly-spaced) x-axis so datasets
+    with similar sizes don't overlap.  One line per algorithm with ±1σ ribbon.
+    Averages across seeds/trials.  Only feasible runs plotted.
+
+    Requires: ``pip install plotly``
+    """
+    try:
+        import plotly.graph_objects as go
+        from plotly.subplots import make_subplots
+        import numpy as _np
+    except ImportError:
+        print("[plot_experiment_summary] pip install plotly")
+        return None
+
+    feasible = df[df['feasible'] == True].copy() if 'feasible' in df.columns else df.copy()
+    if feasible.empty:
+        print("[plot_experiment_summary] No feasible runs to plot")
+        return None
+
+    has_mem = 'memory_peak_mb' in feasible.columns
+    agg_dict = {
+        'soft_m': ('soft_penalty', 'mean'), 'soft_s': ('soft_penalty', 'std'),
+        'rt_m': ('runtime', 'mean'),        'rt_s': ('runtime', 'std'),
+    }
+    if has_mem:
+        agg_dict['mem_m'] = ('memory_peak_mb', 'mean')
+        agg_dict['mem_s'] = ('memory_peak_mb', 'std')
+
+    # Build categorical x labels sorted by size
+    ds_size = (feasible.groupby('dataset')['num_exams'].first()
+                       .sort_values().reset_index())
+    ds_size['label'] = ds_size.apply(
+        lambda r: f"{r['dataset'].replace('exam_comp_', '')} ({r['num_exams']})", axis=1)
+    label_order = ds_size['label'].tolist()
+    ds_to_label = dict(zip(ds_size['dataset'], ds_size['label']))
+
+    feasible['ds_label'] = feasible['dataset'].map(ds_to_label)
+
+    g = feasible.groupby(['ds_label', 'algorithm']).agg(**agg_dict).reset_index().fillna(0)
+
+    # Auto-scale memory unit
+    if has_mem:
+        mscale, munit, mfmt = _mem_unit(g['mem_m'].tolist())
+        g['mem_m'] = g['mem_m'] * mscale
+        g['mem_s'] = g['mem_s'] * mscale
+
+    algos = _order([a for a in g['algorithm'].unique()])
+
+    ncols = 3 if has_mem else 2
+    titles = ['<b>Soft Penalty</b>', '<b>Runtime</b>']
+    if has_mem:
+        titles.append(f'<b>Peak Memory</b>')
+
+    fig = make_subplots(rows=1, cols=ncols, subplot_titles=titles,
+                        horizontal_spacing=0.07)
+
+    panels = [
+        (1, 'soft_m', 'soft_s', 'Soft', '%{y:,.0f}'),
+        (2, 'rt_m',   'rt_s',   'Time', '%{y:.2f}s'),
+    ]
+    if has_mem:
+        panels.append((3, 'mem_m', 'mem_s', 'Mem', f'%{{y:{mfmt}}} {munit}'))
+
+    for algo in algos:
+        ad = g[g['algorithm'] == algo].copy()
+        if ad.empty:
+            continue
+        # Sort by the categorical order
+        ad['_ord'] = ad['ds_label'].map({l: i for i, l in enumerate(label_order)})
+        ad = ad.sort_values('_ord')
+
+        x = ad['ds_label'].values
+        c = ALGO_COLORS.get(algo, '#888888')
+        band = _hex_to_rgba(c, 0.10)
+        short = ALGO_SHORT.get(algo, algo)
+        sym = _PLOTLY_MARKERS.get(ALGO_MARKERS.get(algo, 'o'), 'circle')
+
+        for col, ym, ys, label, fmt in panels:
+            fig.add_trace(go.Scatter(
+                x=x, y=ad[ym].values,
+                name=short, legendgroup=algo,
+                mode='lines+markers', showlegend=(col == 1),
+                line=dict(color=c, width=2.4, shape='spline'),
+                marker=dict(size=7, symbol=sym),
+                hovertemplate=f'{short}: {fmt}<extra></extra>',
+            ), row=1, col=col)
+
+            upper = (ad[ym] + ad[ys]).values
+            lower = _np.maximum(0, (ad[ym] - ad[ys]).values)
+            fig.add_trace(go.Scatter(
+                x=list(x) + list(x[::-1]),
+                y=_np.concatenate([upper, lower[::-1]]),
+                fill='toself', fillcolor=band, line=dict(width=0),
+                showlegend=False, legendgroup=algo, hoverinfo='skip',
+            ), row=1, col=col)
+
+    fig.update_layout(
+        width=1200, height=480,
+        template='plotly_white',
+        font=dict(family='Inter, -apple-system, system-ui, sans-serif', size=12),
+        legend=dict(
+            orientation='h', yanchor='top', y=-0.22,
+            xanchor='center', x=0.5,
+            font=dict(size=11), tracegroupgap=5,
+        ),
+        margin=dict(t=50, b=110, l=60, r=30),
+        hovermode='x unified',
+    )
+
+    for col in range(1, ncols + 1):
+        fig.update_xaxes(
+            categoryorder='array', categoryarray=label_order,
+            tickangle=-35, row=1, col=col,
+            gridcolor='rgba(0,0,0,0.06)',
+        )
+    fig.update_yaxes(title_text='Soft Penalty', row=1, col=1,
+                     gridcolor='rgba(0,0,0,0.06)')
+    fig.update_yaxes(title_text='Seconds', row=1, col=2,
+                     gridcolor='rgba(0,0,0,0.06)')
+    if has_mem:
+        fig.update_yaxes(title_text=munit, row=1, col=3,
+                         gridcolor='rgba(0,0,0,0.06)')
+
+    if save_path:
+        try: _save_plotly(fig, save_path)
+        except Exception: pass
+    fig.show()
+    return fig
+
+
+def plot_algo_bars(df, save_path=None):
+    """Horizontal bar chart: soft penalty, runtime, and memory per algorithm."""
+    try:
+        import plotly.graph_objects as go
+        from plotly.subplots import make_subplots
+    except ImportError:
+        print("[plot_algo_bars] pip install plotly"); return None
+
+    feas = df[df['feasible'] == True].copy() if 'feasible' in df.columns else df.copy()
+    if feas.empty:
+        print("[plot_algo_bars] No feasible runs"); return None
+
+    has_mem = 'memory_peak_mb' in feas.columns
+    agg_dict = {
+        'soft_m': ('soft_penalty', 'mean'), 'soft_s': ('soft_penalty', 'std'),
+        'rt_m': ('runtime', 'mean'), 'rt_s': ('runtime', 'std'),
+        'n': ('soft_penalty', 'count'),
+    }
+    if has_mem:
+        agg_dict['mem_m'] = ('memory_peak_mb', 'mean')
+        agg_dict['mem_s'] = ('memory_peak_mb', 'std')
+
+    g = feas.groupby('algorithm').agg(**agg_dict).reset_index().fillna(0)
+
+    # Auto-scale memory unit
+    if has_mem:
+        mscale, munit, mfmt = _mem_unit(g['mem_m'].tolist())
+        g['mem_m'] = g['mem_m'] * mscale
+        g['mem_s'] = g['mem_s'] * mscale
+
+    ncols = 3 if has_mem else 2
+    titles = ['<b>Soft Penalty</b>', '<b>Runtime</b>']
+    if has_mem:
+        titles.append('<b>Peak Memory</b>')
+
+    panels = [
+        ('soft_m', 'soft_s', 'Soft Penalty', '%{x:,.0f}'),
+        ('rt_m',   'rt_s',   'Seconds',      '%{x:.2f}s'),
+    ]
+    if has_mem:
+        panels.append(('mem_m', 'mem_s', munit, f'%{{x:{mfmt}}} {munit}'))
+
+    fig = make_subplots(rows=1, cols=ncols, subplot_titles=titles,
+                        horizontal_spacing=0.14)
+
+    for col, (ym, ys, xlabel, fmt) in enumerate(panels, 1):
+        gs = g.sort_values(ym, ascending=True)
+        shorts = [ALGO_SHORT.get(a, a) for a in gs['algorithm']]
+        colors = [ALGO_COLORS.get(a, '#888888') for a in gs['algorithm']]
+        fig.add_trace(go.Bar(
+            y=shorts, x=gs[ym].values, orientation='h',
+            error_x=dict(type='data', array=gs[ys].values, thickness=1.2),
+            marker_color=colors, showlegend=False,
+            hovertemplate=f'%{{y}}: {fmt}<extra></extra>',
+        ), row=1, col=col)
+        fig.update_xaxes(title_text=xlabel, row=1, col=col,
+                         gridcolor='rgba(0,0,0,0.06)')
+
+    h = max(350, len(g) * 38)
+    fig.update_layout(
+        width=1150 if has_mem else 1050, height=h,
+        template='plotly_white',
+        font=dict(family='Inter, -apple-system, system-ui, sans-serif', size=12),
+        margin=dict(t=45, b=30, l=80, r=30),
+    )
+
+    if save_path:
+        try: _save_plotly(fig, save_path)
+        except Exception: pass
+    fig.show()
+    return fig
+
+
+def plot_algo_boxes(df, save_path=None):
+    """Box plot: soft penalty distribution per algorithm, all datasets pooled."""
+    try:
+        import plotly.graph_objects as go
+    except ImportError:
+        print("[plot_algo_boxes] pip install plotly"); return None
+
+    feas = df[df['feasible'] == True].copy() if 'feasible' in df.columns else df.copy()
+    if feas.empty:
+        print("[plot_algo_boxes] No feasible runs"); return None
+
+    medians = feas.groupby('algorithm')['soft_penalty'].median().sort_values()
+    algos = medians.index.tolist()
+
+    fig = go.Figure()
+    for algo in algos:
+        ad = feas[feas['algorithm'] == algo]
+        short = ALGO_SHORT.get(algo, algo)
+        fig.add_trace(go.Box(
+            y=ad['soft_penalty'].values, name=short,
+            marker_color=ALGO_COLORS.get(algo, '#888888'),
+            boxpoints='all', jitter=0.4, pointpos=-1.5,
+            marker=dict(size=4, opacity=0.5),
+            line=dict(width=1.8),
+            hoverinfo='y+name',
+        ))
+
+    fig.update_layout(
+        width=1050, height=480, template='plotly_white',
+        font=dict(family='Inter, -apple-system, system-ui, sans-serif', size=12),
+        yaxis_title='Soft Penalty', showlegend=False,
+        title=dict(text='<b>Soft Penalty Distribution</b>', x=0.5, font_size=14),
+        margin=dict(t=50, b=40, l=65, r=30),
+        yaxis=dict(gridcolor='rgba(0,0,0,0.06)'),
+    )
+
+    if save_path:
+        try: _save_plotly(fig, save_path)
+        except Exception: pass
+    fig.show()
+    return fig
+
+
+def plot_algo_radar(df, save_path=None):
+    """Radar chart: normalised performance profile per algorithm (smaller = better)."""
+    try:
+        import plotly.graph_objects as go
+        import numpy as _np
+    except ImportError:
+        print("[plot_algo_radar] pip install plotly"); return None
+
+    feas = df[df['feasible'] == True].copy() if 'feasible' in df.columns else df.copy()
+    if feas.empty:
+        print("[plot_algo_radar] No feasible runs"); return None
+
+    metrics = [('soft_penalty', 'Soft Penalty', False),
+               ('runtime', 'Runtime', False),
+               ('memory_peak_mb', 'Memory', False),
+               ('two_in_a_row', '2-in-a-Row', False),
+               ('two_in_a_day', '2-in-a-Day', False),
+               ('period_spread', 'Period Spread', False),
+               ('non_mixed_durations', 'Mixed Dur.', False),
+               ('front_load', 'Front Load', False)]
+    # Keep only metrics that exist in df
+    metrics = [(k, l, inv) for k, l, inv in metrics if k in feas.columns]
+    if len(metrics) < 3:
+        print("[plot_algo_radar] Need >= 3 metrics"); return None
+
+    g = feas.groupby('algorithm')[[m[0] for m in metrics]].mean()
+    algos = _order([a for a in g.index])
+
+    # Normalise 0–1 per metric (0 = best)
+    normed = g.copy()
+    for col, _, inv in metrics:
+        mn, mx = g[col].min(), g[col].max()
+        if mx > mn:
+            normed[col] = (g[col] - mn) / (mx - mn)
+            if inv:
+                normed[col] = 1.0 - normed[col]
+        else:
+            normed[col] = 0.0
+
+    cats = [m[1] for m in metrics]
+
+    fig = go.Figure()
+    for algo in algos:
+        if algo not in normed.index:
+            continue
+        vals = [normed.loc[algo, m[0]] for m in metrics]
+        vals.append(vals[0])  # close the polygon
+        short = ALGO_SHORT.get(algo, algo)
+        c = ALGO_COLORS.get(algo, '#888888')
+        fig.add_trace(go.Scatterpolar(
+            r=vals, theta=cats + [cats[0]],
+            name=short, line=dict(color=c, width=2.2),
+            fill='toself', fillcolor=_hex_to_rgba(c, 0.08),
+        ))
+
+    fig.update_layout(
+        width=650, height=520, template='plotly_white',
+        font=dict(family='Inter, -apple-system, system-ui, sans-serif', size=11),
+        polar=dict(
+            radialaxis=dict(visible=True, range=[0, 1.05],
+                            gridcolor='rgba(0,0,0,0.08)', tickfont_size=9),
+            angularaxis=dict(gridcolor='rgba(0,0,0,0.08)'),
+        ),
+        title=dict(text='<b>Performance Profile</b> <sub>(smaller = better)</sub>',
+                   x=0.5, font_size=14),
+        legend=dict(font_size=10),
+        margin=dict(t=70, b=40, l=65, r=65),
+    )
+
+    if save_path:
+        try: _save_plotly(fig, save_path)
+        except Exception: pass
+    fig.show()
+    return fig
+
+
+def _spread_labels(xs, ys, min_gap_frac=0.04):
+    """Pick per-point textposition to reduce overlap.
+
+    Alternates between positions around each marker based on proximity
+    to neighbours so labels don't pile up.
+    """
+    import numpy as _np
+    n = len(xs)
+    if n == 0:
+        return []
+    positions = ['top center'] * n
+    opts = ['top center', 'bottom center', 'top right', 'top left',
+            'bottom right', 'bottom left', 'middle right', 'middle left']
+    xs, ys = _np.array(xs, dtype=float), _np.array(ys, dtype=float)
+    xr = xs.max() - xs.min() if xs.max() != xs.min() else 1.0
+    yr = ys.max() - ys.min() if ys.max() != ys.min() else 1.0
+    for i in range(n):
+        best, best_min = opts[0], -1.0
+        for pos in opts:
+            min_d = float('inf')
+            for j in range(n):
+                if j == i:
+                    continue
+                d = (((xs[i]-xs[j])/xr)**2 + ((ys[i]-ys[j])/yr)**2)**0.5
+                min_d = min(min_d, d)
+            if min_d > best_min:
+                best, best_min = pos, min_d
+        positions[i] = best
+    return positions
+
+
+def plot_algo_scatter(df, save_path=None):
+    """Scatter: quality (y) vs runtime (x), one point per algorithm."""
+    try:
+        import plotly.graph_objects as go
+    except ImportError:
+        print("[plot_algo_scatter] pip install plotly"); return None
+
+    feas = df[df['feasible'] == True].copy() if 'feasible' in df.columns else df.copy()
+    if feas.empty:
+        print("[plot_algo_scatter] No feasible runs"); return None
+
+    g = feas.groupby('algorithm').agg(
+        soft_m=('soft_penalty', 'mean'), rt_m=('runtime', 'mean'),
+    ).reset_index()
+
+    algos = g['algorithm'].tolist()
+    shorts = [ALGO_SHORT.get(a, a) for a in algos]
+    colors = [ALGO_COLORS.get(a, '#888888') for a in algos]
+    syms = [_PLOTLY_MARKERS.get(ALGO_MARKERS.get(a, 'o'), 'circle') for a in algos]
+
+    fig = go.Figure()
+    for i, algo in enumerate(algos):
+        r = g[g['algorithm'] == algo].iloc[0]
+        fig.add_trace(go.Scatter(
+            x=[r['rt_m']], y=[r['soft_m']],
+            mode='markers',
+            marker=dict(size=13, color=colors[i], symbol=syms[i],
+                        line=dict(width=1.2, color='white')),
+            name=shorts[i], showlegend=True,
+            hovertemplate=(f'<b>{shorts[i]}</b><br>Soft: %{{y:,.0f}}<br>'
+                           f'Time: %{{x:.2f}}s<extra></extra>'),
+        ))
+
+    fig.update_layout(
+        width=700, height=520,
+        template='plotly_white',
+        title=dict(text='<b>Quality vs Runtime</b>', x=0.5, font_size=14),
+        font=dict(family='Inter, -apple-system, system-ui, sans-serif', size=12),
+        margin=dict(t=55, b=50, l=70, r=140),
+        xaxis=dict(title='Mean Runtime (s)', gridcolor='rgba(0,0,0,0.06)'),
+        yaxis=dict(title='Mean Soft Penalty', gridcolor='rgba(0,0,0,0.06)'),
+        legend=dict(yanchor='top', y=0.98, xanchor='left', x=1.02,
+                    font_size=10),
+    )
+
+    if save_path:
+        try: _save_plotly(fig, save_path)
+        except Exception: pass
+    fig.show()
+    return fig
+
+
+def plot_algo_heatmap(df, save_path=None):
+    """Heatmap: algorithm x dataset, coloured by mean soft penalty.
+
+    Cells with no feasible result show 'n/f' (not feasible) in grey.
+    Algorithms that only appear on a subset of datasets (e.g. Feasibility,
+    Greedy) are excluded to keep the grid clean.
+    """
+    try:
+        import plotly.graph_objects as go
+        import numpy as _np
+    except ImportError:
+        print("[plot_algo_heatmap] pip install plotly"); return None
+
+    feas = df[df['feasible'] == True].copy() if 'feasible' in df.columns else df.copy()
+    if feas.empty:
+        print("[plot_algo_heatmap] No feasible runs"); return None
+
+    # Exclude init-only algorithms (they don't run on every set)
+    skip = {'Greedy', 'Feasibility'}
+    feas = feas[~feas['algorithm'].isin(skip)]
+    if feas.empty:
+        print("[plot_algo_heatmap] No search-algorithm data"); return None
+
+    all_algos = sorted(df[~df['algorithm'].isin(skip)]['algorithm'].unique())
+    all_datasets = sorted(df['dataset'].unique())
+
+    g = feas.groupby(['algorithm', 'dataset'])['soft_penalty'].mean().reset_index()
+    pivot = g.pivot(index='algorithm', columns='dataset', values='soft_penalty')
+    pivot = pivot.reindex(index=all_algos, columns=all_datasets)
+
+    # Build infeasible lookup: algorithm ran but never reached feasible
+    infeas_set = set()
+    for algo in all_algos:
+        for ds in all_datasets:
+            sub = df[(df['algorithm'] == algo) & (df['dataset'] == ds)]
+            if len(sub) > 0 and sub['feasible'].sum() == 0:
+                infeas_set.add((algo, ds))
+
+    # Order: datasets by num_exams, algorithms by overall mean soft
+    ds_size = df.groupby('dataset')['num_exams'].first().sort_values()
+    ds_order = [d for d in ds_size.index if d in pivot.columns]
+    ds_labels = [d.replace('exam_comp_', '') for d in ds_order]
+
+    algo_means = pivot[ds_order].mean(axis=1).sort_values()
+    algo_order = [a for a in algo_means.index if a in pivot.index]
+    algo_labels = [ALGO_SHORT.get(a, a) for a in algo_order]
+
+    z = pivot.loc[algo_order, ds_order].values
+
+    # Per-column normalisation
+    z_norm = _np.full_like(z, dtype=float, fill_value=_np.nan)
+    for j in range(z.shape[1]):
+        col = z[:, j]
+        valid = ~_np.isnan(col)
+        if valid.any():
+            mn, mx = _np.nanmin(col), _np.nanmax(col)
+            if mx > mn:
+                z_norm[:, j] = (col - mn) / (mx - mn)
+            else:
+                z_norm[valid, j] = 0.0
+
+    # Annotation text: raw values or 'n/f'
+    text = []
+    for i, algo in enumerate(algo_order):
+        row_text = []
+        for j, ds in enumerate(ds_order):
+            v = z[i, j]
+            if not _np.isnan(v):
+                row_text.append(f'{v:,.0f}')
+            elif (algo, ds) in infeas_set:
+                row_text.append('n/f')
+            else:
+                row_text.append('-')
+        text.append(row_text)
+
+    fig = go.Figure(go.Heatmap(
+        z=z_norm, x=ds_labels, y=algo_labels,
+        text=text, texttemplate='%{text}', textfont=dict(size=10),
+        colorscale='RdYlGn_r', showscale=True,
+        colorbar=dict(title='Relative', tickvals=[0, 0.5, 1],
+                      ticktext=['Best', 'Mid', 'Worst']),
+        hovertemplate=('<b>%{y}</b> on %{x}<br>'
+                       'Soft: %{text}<extra></extra>'),
+        xgap=2, ygap=2,
+    ))
+
+    fig.update_layout(
+        width=max(550, len(ds_order) * 85 + 180),
+        height=max(400, len(algo_order) * 38 + 120),
+        template='plotly_white',
+        font=dict(family='Inter, -apple-system, system-ui, sans-serif', size=12),
+        title=dict(text='<b>Soft Penalty Heatmap</b> <sub>(per-dataset normalised, n/f = not feasible)</sub>',
+                   x=0.5, font_size=14),
+        xaxis=dict(title='', side='bottom'),
+        yaxis=dict(title='', autorange='reversed'),
+        margin=dict(t=65, b=40, l=80, r=30),
+    )
+
+    if save_path:
+        try: _save_plotly(fig, save_path)
+        except Exception: pass
+    fig.show()
+    return fig
+
+
+def save_all_plotly(df, output_dir="graphs"):
+    """Save all Plotly summary charts as PNG to graphs/.
+
+    Suppresses fig.show() so charts are written to disk without
+    duplicating the notebook display output.
+    """
+    import os, plotly.graph_objects as go
+    os.makedirs(output_dir, exist_ok=True)
+    _orig = go.Figure.show
+    go.Figure.show = lambda self, *a, **k: None
+    try:
+        p = lambda name: os.path.join(output_dir, name)
+        plot_experiment_summary(df, save_path=p('summary_lines.png'))
+        plot_algo_bars(df,              save_path=p('algo_bars.png'))
+        plot_algo_boxes(df,             save_path=p('algo_boxes.png'))
+        plot_algo_radar(df,             save_path=p('algo_radar.png'))
+        plot_algo_scatter(df,           save_path=p('algo_scatter.png'))
+        plot_algo_heatmap(df,           save_path=p('algo_heatmap.png'))
+    finally:
+        go.Figure.show = _orig
+    print(f"[Plot] Saved 6 charts to {output_dir}/")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

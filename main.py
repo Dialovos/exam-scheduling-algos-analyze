@@ -1,14 +1,11 @@
 """
-Exam Scheduling Benchmark Suite
-
-Greedy, Tabu Search, HHO → C++ (100–200x faster)
-IP solver → Python (PuLP/CBC)
+12 algorithms via C++ solver (100-200x faster than Python fallback).
 
 Usage:
   python main.py
   python main.py --dataset instances/exam_comp_set4.exam
   python main.py --dataset data.exam --algo tabu
-  python main.py --dataset data.exam --algo ip --limit 100
+  python main.py --dataset data.exam --algo sa,gd,vns
 """
 
 import argparse
@@ -87,7 +84,7 @@ def run_demo(size=50, algo=None, verbose=True, output_dir='results', **kwargs):
     os.makedirs(output_dir, exist_ok=True)
     results = {}
 
-    # C++ algorithms (greedy/tabu/hho)
+    # C++ algorithms
     if algo != 'ip':
         cpp_algo = algo if algo else 'all'
         cpp_results = run_cpp_solver(
@@ -189,14 +186,13 @@ def main():
         description="Exam Scheduling Benchmark Suite v3 (C++ Optimized)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Algorithms:  greedy, tabu, hho, kempe, sa, alns, gd, abc, ga, lahc → C++  |  ns → meta  |  ip → Python
+Algorithms:  greedy, tabu, kempe, sa, alns, gd, abc, ga, lahc, woa, cpsat, vns → C++  |  ip → Python
 
 Examples:
   python main.py                                        # Demo 50 exams
   python main.py --dataset data.exam                    # All algos
   python main.py --dataset data.exam --algo tabu        # Tabu only
-  python main.py --dataset data.exam --algo ip --limit 100
-  python main.py --mode plot
+  python main.py --dataset data.exam --algo sa,gd,vns   # Multiple algos
   python main.py --mode tune --dataset data.exam        # Auto-tune params + chains
   python main.py --mode tune --dataset data.exam --resume  # Resume tuning
         """)
@@ -205,7 +201,7 @@ Examples:
     _gp = load_params_flat()
 
     ap.add_argument('--mode', choices=['demo', 'plot', 'batches', 'tune'], default='demo')
-    ap.add_argument('--algo', choices=['greedy', 'ip', 'tabu', 'hho', 'kempe', 'sa', 'alns', 'gd', 'abc', 'ga', 'lahc', 'ns'])
+    ap.add_argument('--algo', choices=['greedy', 'ip', 'tabu', 'kempe', 'sa', 'alns', 'gd', 'abc', 'ga', 'lahc', 'woa', 'cpsat', 'vns'])
     ap.add_argument('--size', type=int, default=50)
     ap.add_argument('--dataset', type=str)
     ap.add_argument('--limit', type=int, default=0)
@@ -220,8 +216,6 @@ Examples:
                     help='Disable batching, write directly to results/.')
     ap.add_argument('--tabu-iters', type=int, default=_gp.get('tabu_iters', 2000))
     ap.add_argument('--tabu-patience', type=int, default=_gp.get('tabu_patience', 500))
-    ap.add_argument('--hho-pop', type=int, default=_gp.get('hho_pop', 30))
-    ap.add_argument('--hho-iters', type=int, default=_gp.get('hho_iters', 200))
     ap.add_argument('--sa-iters', type=int, default=_gp.get('sa_iters', 5000))
     ap.add_argument('--kempe-iters', type=int, default=_gp.get('kempe_iters', 3000))
     ap.add_argument('--alns-iters', type=int, default=_gp.get('alns_iters', 2000))
@@ -232,7 +226,11 @@ Examples:
     ap.add_argument('--ga-iters', type=int, default=_gp.get('ga_iters', 500))
     ap.add_argument('--lahc-iters', type=int, default=_gp.get('lahc_iters', 5000))
     ap.add_argument('--lahc-list', type=int, default=_gp.get('lahc_list', 0))
-    ap.add_argument('--ns-finalists', type=int, default=3)
+    ap.add_argument('--woa-pop', type=int, default=_gp.get('woa_pop', 25))
+    ap.add_argument('--woa-iters', type=int, default=_gp.get('woa_iters', 3000))
+    ap.add_argument('--cpsat-time', type=float, default=_gp.get('cpsat_time', 60.0))
+    ap.add_argument('--vns-iters', type=int, default=_gp.get('vns_iters', 5000))
+    ap.add_argument('--vns-budget', type=int, default=_gp.get('vns_budget', 0))
 
     # Param management
     ap.add_argument('--show-params', action='store_true',
@@ -291,13 +289,14 @@ Examples:
 
     verbose = not args.quiet
     kw = dict(tabu_iters=args.tabu_iters, tabu_patience=args.tabu_patience,
-              hho_pop=args.hho_pop, hho_iters=args.hho_iters,
               sa_iters=args.sa_iters, kempe_iters=args.kempe_iters,
               alns_iters=args.alns_iters, gd_iters=args.gd_iters,
               abc_pop=args.abc_pop, abc_iters=args.abc_iters,
               ga_pop=args.ga_pop, ga_iters=args.ga_iters,
               lahc_iters=args.lahc_iters, lahc_list=args.lahc_list,
-              ns_finalists=args.ns_finalists,
+              woa_pop=args.woa_pop, woa_iters=args.woa_iters,
+              cpsat_time=args.cpsat_time,
+              vns_iters=args.vns_iters, vns_budget=args.vns_budget,
               seed=args.seed)
 
     # Resolve output directory via batch manager

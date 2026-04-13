@@ -1,11 +1,7 @@
 """
-Models real ITC 2007 characteristics analyzed from sets 4, 5, and 7:
-  - Power-law enrollment (few massive exams, long tail of small ones)
-  - Department-clustered student enrollment (realistic conflict patterns)
-  - Tight period counts (max_degree >> num_periods, many exams per period)
-  - Multiple exam/period durations, period and room penalties
-  - COINCIDENCE, EXCLUSION, AFTER hard constraints
-  - Varied room capacities (10x+ range)
+Synthetic instance generator modeling real ITC 2007 characteristics
+(power-law enrollment, department clustering, tight period counts,
+COINCIDENCE/EXCLUSION/AFTER constraints, varied room capacities).
 
 Presets (approximate at n=200, scales with instance size):
   "easy"        — many periods/rooms, few constraints
@@ -13,7 +9,7 @@ Presets (approximate at n=200, scales with instance size):
   "hard"        — tight capacity, many constraints
   "competition" — tightest ratios, closest to ITC 2007 difficulty
 
-A feasibility floor ensures enough room×period slots exist at any size.
+Feasibility floor ensures enough room x period slots at any size.
 """
 
 import random

@@ -1,8 +1,6 @@
 """
-Evaluator for the Capacitated Examination Timetabling Problem.
-
-Computes Distance to Feasibility (hard constraint violations) and
-soft constraint penalty per the ITC 2007 specification.
+Hard constraint violations (distance to feasibility) and soft constraint
+penalty per ITC 2007 spec. Delegates to FastEvaluator for computation.
 """
 
 from __future__ import annotations

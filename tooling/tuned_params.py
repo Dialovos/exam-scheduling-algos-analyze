@@ -1,8 +1,8 @@
 """
-Tuned Parameters — Single source of truth for algorithm defaults.
+Single source of truth for algorithm defaults.
 
-Reads from tuned_params.json if it exists, otherwise falls back to
-hardcoded defaults. Maintains a version log for rollback.
+Reads tuned_params.json if it exists, falls back to hardcoded defaults.
+Maintains a version log for rollback.
 
 Usage:
     from tuned_params import load_params, save_params, get
@@ -25,7 +25,6 @@ _LOG_FILE = _ROOT / 'tuned_params_log.json'
 
 FALLBACK_PARAMS = {
     'tabu':  {'tabu_iters': 2000, 'tabu_tenure': 20, 'tabu_patience': 500},
-    'hho':   {'hho_pop': 30,  'hho_iters': 200},
     'sa':    {'sa_iters': 5000},
     'kempe': {'kempe_iters': 3000},
     'alns':  {'alns_iters': 2000},
@@ -33,6 +32,9 @@ FALLBACK_PARAMS = {
     'abc':   {'abc_pop': 30,  'abc_iters': 3000},
     'ga':    {'ga_pop': 50,   'ga_iters': 500},
     'lahc':  {'lahc_iters': 5000, 'lahc_list': 0},
+    'woa':   {'woa_pop': 25,  'woa_iters': 3000},
+    'cpsat': {'cpsat_time': 60.0},
+    'vns':   {'vns_iters': 5000, 'vns_budget': 0},
 }
 
 

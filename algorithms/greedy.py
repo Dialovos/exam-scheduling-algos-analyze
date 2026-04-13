@@ -1,11 +1,9 @@
 """
-DSatur Greedy with Constraint-Aware Placement & Repair
-=======================================================
 Root causes of infeasibility in the original greedy:
-  1. Static degree ordering -> high-degree exams get stuck (Fix: DSatur)
-  2. No period hard-constraint enforcement in fallback (Fix: coincidence groups)
-  3. Room capacity overflow (Fix: best-fit + room rebalancing)
-  4. Blind fallback to period 0 (Fix: least-damage + targeted repair)
+  1. Static degree ordering -> high-degree exams get stuck (fix: DSatur)
+  2. No period hard-constraint enforcement in fallback (fix: coincidence groups)
+  3. Room capacity overflow (fix: best-fit + room rebalancing)
+  4. Blind fallback to period 0 (fix: least-damage + targeted repair)
 """
 import time
 import random as _random

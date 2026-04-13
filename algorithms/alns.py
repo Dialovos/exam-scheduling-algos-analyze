@@ -1,9 +1,7 @@
 """
-Adaptive Large Neighborhood Search (ALNS)
-==========================================
-Destroy-and-repair framework with adaptive operator selection.
-3 destroy operators (random, worst, related) + 2 repair operators (greedy, random).
-SA-like acceptance criterion with adaptive operator weights.
+Destroy-and-repair with adaptive operator selection.
+3 destroy operators (random, worst, related) + 2 repair (greedy, random).
+SA-like acceptance with adaptive operator weights.
 """
 
 import time

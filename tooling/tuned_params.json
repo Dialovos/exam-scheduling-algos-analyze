@@ -7,10 +7,6 @@
       "tabu_tenure": 20,
       "tabu_patience": 500
     },
-    "hho": {
-      "hho_pop": 74,
-      "hho_iters": 304
-    },
     "sa": {
       "sa_iters": 5000
     },
@@ -34,6 +30,17 @@
     "lahc": {
       "lahc_iters": 5000,
       "lahc_list": 0
+    },
+    "woa": {
+      "woa_pop": 25,
+      "woa_iters": 3000
+    },
+    "cpsat": {
+      "cpsat_time": 60.0
+    },
+    "vns": {
+      "vns_iters": 5000,
+      "vns_budget": 0
     }
   },
   "aggregate_score": 3.2968434202136634,

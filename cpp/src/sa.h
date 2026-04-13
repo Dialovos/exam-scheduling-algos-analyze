@@ -1,17 +1,14 @@
 /*
- * sa.h — Simulated Annealing
+ * Multi-neighbourhood simulated annealing.
+ * Based on Van Bulck, Goossens & Schaerf (2025).
  *
- * Geometric cooling with probabilistic acceptance of worse moves.
- * Uses move_delta for O(k) neighbor evaluation.
- * Re-syncs with full_eval every 50 iterations.
- * Reheats when stuck.
+ * 7 operators via nbhd::select_and_apply:
+ *   Move, Swap, Kempe, Kick, Shake, RoomBeam, RoomOnly
  *
- * FastSA pruning: tracks accepted moves per exam per temperature bin.
- * Exams with zero accepted moves in the previous bin are skipped (90%),
- * saving move_delta evaluations on "frozen" exams at low T.
- *
- * Mixed neighborhood: 70% period+room moves, 30% room-only moves
- * for separate room optimization.
+ * Component-aware exam targeting (largest/costliest component bias).
+ * Feature-based temperature calibration from density + period ratio.
+ * Shake perturbation on reheat, not just a temp bump.
+ * Infeasible phase uses kick + kempe for faster feasibility recovery.
  */
 
 #pragma once
@@ -19,6 +16,7 @@
 #include "models.h"
 #include "evaluator.h"
 #include "greedy.h"
+#include "neighbourhoods.h"
 
 #include <algorithm>
 #include <chrono>
@@ -42,6 +40,7 @@ inline AlgoResult solve_sa(
     int ne = prob.n_e(), np = prob.n_p(), nr = prob.n_r();
     FastEvaluator fe(prob);
 
+    // Precompute valid periods/rooms per exam
     std::vector<int> exam_dur(ne), exam_enr(ne), period_dur(np), room_cap(nr);
     for (auto& e : prob.exams) { exam_dur[e.id] = e.duration; exam_enr[e.id] = e.enrollment(); }
     for (auto& p : prob.periods) period_dur[p.id] = p.duration;
@@ -73,12 +72,23 @@ inline AlgoResult solve_sa(
     }
 
     double current_fitness = ev.fitness();
+    bool current_feasible = ev.feasible();
     Solution best_sol = sol.copy();
     double best_fitness = current_fitness;
     bool best_feasible = ev.feasible();
 
-    // Temperature calibration: sample random moves, exclude hard-violation deltas
+    // ── Temperature calibration ──
+    // Feature-based: uses conflict density and period ratio for instance-adaptive T0.
+    // Falls back to sampling if features suggest extreme instances.
     if (init_temp <= 0.0) {
+        // Instance features
+        int total_conflicts = 0;
+        for (int e = 0; e < ne; e++) total_conflicts += (int)prob.adj[e].size();
+        total_conflicts /= 2; // each edge counted twice
+        double density = (ne > 1) ? (double)total_conflicts / ((double)ne * (ne - 1) / 2) : 0.0;
+        double period_ratio = (double)np / std::max(ne, 1);
+
+        // Sampling-based calibration (300 random soft-only moves) — primary
         double avg_worsen = 0; int n_w = 0;
         std::uniform_int_distribution<int> sde(0, ne - 1);
         for (int s = 0; s < 300; s++) {
@@ -90,8 +100,12 @@ inline AlgoResult solve_sa(
             if (d > 0 && d < 50000) { avg_worsen += d; n_w++; }
         }
         double calib_temp = (n_w > 0) ? std::max(1.0, (avg_worsen / n_w) / 0.693) : 100.0;
-        // Floor: small fraction of soft to ensure minimum exploration on large instances
-        init_temp = std::max(calib_temp, ev.soft() * 0.005);
+
+        // Feature-based floor: dense/tight instances need minimum exploration
+        double feature_floor = 50.0 * (1.0 + density * 2.0) * std::min(3.0, 1.0 / std::max(0.3, period_ratio));
+
+        // Soft floor: small fraction of initial soft penalty
+        init_temp = std::max({calib_temp, feature_floor, ev.soft() * 0.005});
     }
     double temp = init_temp;
 
@@ -103,10 +117,10 @@ inline AlgoResult solve_sa(
     std::uniform_int_distribution<int> de(0, ne - 1);
     std::uniform_real_distribution<double> unif(0.0, 1.0);
 
-    // Per-exam cost for weighted selection (recomputed periodically)
+    // Per-exam cost for weighted selection via alias table
     std::vector<double> exam_cost(ne, 1.0);
+    AliasTable alias;
     auto recompute_costs = [&]() {
-        double total = 0;
         for (int e = 0; e < ne; e++) {
             int pid = sol.period_of[e]; if (pid < 0) { exam_cost[e] = 1.0; continue; }
             double c = 1.0;
@@ -122,29 +136,21 @@ inline AlgoResult solve_sa(
                 }
             }
             exam_cost[e] = c;
-            total += c;
         }
-        // Normalize to make a distribution
-        if (total > 0) for (int e = 0; e < ne; e++) exam_cost[e] /= total;
+        alias.build(exam_cost);
     };
-
-    auto weighted_pick = [&]() -> int {
-        double r = unif(rng);
-        double acc = 0;
-        for (int e = 0; e < ne; e++) {
-            acc += exam_cost[e];
-            if (r <= acc) return e;
-        }
-        return ne - 1;
-    };
-
     recompute_costs();
 
-    // FastSA: temperature-bin activity tracking
-    int bin_size = std::max(ne, 100);
-    std::vector<int> active_cur(ne, 0);
-    std::vector<int> active_prev(ne, 1);  // all active initially
-    int bin_iter = 0;
+    // ── Neighbourhood operator weights ──
+    // Shake excluded from regular sampling (only used during reheat).
+    // Shake blindly perturbs exams and can create hard violations,
+    // trapping the search in infeasible recovery on tight instances.
+    nbhd::OpWeights op_weights;
+    op_weights.w[static_cast<int>(nbhd::OpType::SHAKE)] = 0.0;
+    op_weights.w[static_cast<int>(nbhd::OpType::MOVE)] = 0.40;
+    op_weights.w[static_cast<int>(nbhd::OpType::KEMPE)] = 0.20;
+    op_weights.w[static_cast<int>(nbhd::OpType::KICK)] = 0.15;
+    op_weights.w[static_cast<int>(nbhd::OpType::ROOM_BEAM)] = 0.10;
 
     int no_improve = 0;
     int iters_done = 0;
@@ -152,101 +158,43 @@ inline AlgoResult solve_sa(
     for (int it = 0; it < max_iterations; it++) {
         iters_done = it + 1;
 
-        // FastSA: advance temperature bin
-        bin_iter++;
-        if (bin_iter >= bin_size) {
-            active_prev.swap(active_cur);
-            std::fill(active_cur.begin(), active_cur.end(), 0);
-            bin_iter = 0;
-        }
-
-        if (it % 50 == 0) {
+        // Periodic resync
+        if (it % 200 == 0) {
             ev = fe.full_eval(sol);
             current_fitness = ev.fitness();
+            current_feasible = ev.feasible();
         }
-        // Recompute cost weights periodically
         if (it % 500 == 0) recompute_costs();
 
-        int eid = (unif(rng) < 0.7) ? weighted_pick() : de(rng);
-        auto& vp = valid_p[eid];
-        auto& vr = valid_r[eid];
-        if (vp.empty() || vr.empty()) continue;
+        // ── Multi-Neighbourhood SA (unified for feasible + infeasible) ──
+        // Hard violations are weighted 100000x, so SA naturally avoids
+        // creating them (acceptance probability ≈ 0 for +100000 delta).
+        // Kick and Kempe operators handle violation reduction when present.
 
-        // FastSA: skip exams inactive in previous bin (90% skip rate)
-        bool is_feasible = (current_fitness < 100000);
-        if (is_feasible && active_prev[eid] == 0 && unif(rng) < 0.9)
-            continue;
+        // Select neighbourhood
+        nbhd::OpType op = op_weights.sample(rng);
 
-        double delta;
-        int move_pid, move_rid;
-        bool is_swap = false;
-        int swap_e2 = -1, swap_e2_pid = -1, swap_e2_rid = -1;
+        // SA acceptance function
+        auto sa_accept = [&](double delta) -> bool {
+            if (delta < 0) return true;
+            if (temp > 1e-10) return unif(rng) < std::exp(-delta / temp);
+            return false;
+        };
 
-        if (!is_feasible) {
-            // Steepest descent scan — quickly reduce hard violations
-            int cp = sol.period_of[eid];
-            int best_pid = -1, best_rid = -1;
-            double best_d = 1e18;
-            for (int pid : vp) {
-                if (pid == cp) continue;
-                for (int rid : vr) {
-                    double d = fe.move_delta(sol, eid, pid, rid);
-                    if (d < best_d) { best_d = d; best_pid = pid; best_rid = rid; }
-                }
-            }
-            if (best_pid < 0) continue;
-            delta = best_d; move_pid = best_pid; move_rid = best_rid;
-        } else {
-            double r_move = unif(rng);
-            if (r_move < 0.25 && ne > 1) {
-                // Swap move: exchange periods of two exams (keep rooms)
-                int e2 = (unif(rng) < 0.7) ? weighted_pick() : de(rng);
-                if (e2 == eid) continue;
-                int cp1 = sol.period_of[eid], cr1 = sol.room_of[eid];
-                int cp2 = sol.period_of[e2], cr2 = sol.room_of[e2];
-                if (cp1 < 0 || cp2 < 0 || cp1 == cp2) continue;
-                if (exam_dur[eid] > period_dur[cp2] || exam_dur[e2] > period_dur[cp1]) continue;
-                // Compute via temp-apply/undo
-                double d1 = fe.move_delta(sol, eid, cp2, cr1);
-                fe.apply_move(sol, eid, cp2, cr1);
-                double d2 = fe.move_delta(sol, e2, cp1, cr2);
-                fe.apply_move(sol, eid, cp1, cr1); // undo
-                delta = d1 + d2;
-                move_pid = cp2; move_rid = cr1;
-                is_swap = true;
-                swap_e2 = e2; swap_e2_pid = cp1; swap_e2_rid = cr2;
-            } else if (r_move < 0.40 && nr > 1) {
-                // Room-only move
-                move_pid = sol.period_of[eid];
-                move_rid = vr[rng() % vr.size()];
-                if (move_rid == sol.room_of[eid]) continue;
-                delta = fe.move_delta(sol, eid, move_pid, move_rid);
-            } else {
-                // Single period+room move
-                move_pid = vp[rng() % vp.size()];
-                move_rid = vr[rng() % vr.size()];
-                if (move_pid == sol.period_of[eid] && move_rid == sol.room_of[eid]) continue;
-                delta = fe.move_delta(sol, eid, move_pid, move_rid);
-            }
-        }
+        // Apply operator via dispatcher
+        auto mr = nbhd::select_and_apply(
+            op, sol, fe, prob, valid_p, valid_r, alias, rng,
+            sa_accept, std::max(3, ne / 20));
 
-        bool accept = (delta < 0);
-        if (!accept && temp > 1e-10)
-            accept = (unif(rng) < std::exp(-delta / temp));
-
-        if (accept) {
-            fe.apply_move(sol, eid, move_pid, move_rid);
-            if (is_swap) {
-                fe.apply_move(sol, swap_e2, swap_e2_pid, swap_e2_rid);
-                active_cur[swap_e2]++;
-            }
-            current_fitness += delta;
-            active_cur[eid]++;
+        if (mr.applied) {
+            current_fitness += mr.delta;
+            op_weights.record(op);
 
             if (current_fitness < best_fitness - 0.5) {
                 auto check = fe.full_eval(sol);
                 double af = check.fitness();
                 bool af_feasible = check.feasible();
+                current_feasible = af_feasible;
                 bool dominated = (best_feasible && !af_feasible);
                 if (!dominated && af < best_fitness) {
                     best_sol = sol.copy();
@@ -255,7 +203,9 @@ inline AlgoResult solve_sa(
                     no_improve = 0;
                     if (verbose && (it < 10 || it % 1000 == 0))
                         std::cerr << "[SA] Iter " << it << ": best hard=" << check.hard()
-                                  << " soft=" << check.soft() << " T=" << temp << std::endl;
+                                  << " soft=" << check.soft()
+                                  << " op=" << static_cast<int>(op)
+                                  << " T=" << temp << std::endl;
                 }
                 current_fitness = af;
             } else {
@@ -267,9 +217,25 @@ inline AlgoResult solve_sa(
 
         temp *= cooling;
 
-        // Reheat when stuck — stronger reheat at 30% of init
-        if (no_improve > 0 && no_improve % 1000 == 0)
-            temp = std::max(temp, init_temp * 0.3);
+        // ── Reheat when stuck ──
+        if (no_improve > 0 && no_improve % 1000 == 0) {
+            // Restart from best_sol + light perturbation to escape local optima
+            sol = best_sol.copy();
+            int shake_n = (no_improve % 3000 == 0) ? std::max(5, ne / 15) : 3;
+            nbhd::shake(sol, fe, valid_p, valid_r, shake_n, rng);
+            temp = init_temp * 0.3;
+            ev = fe.full_eval(sol);
+            current_fitness = ev.fitness();
+            current_feasible = ev.feasible();
+            // If shake broke feasibility, recover immediately
+            if (!current_feasible) {
+                fe.recover_feasibility(sol, 50, seed + no_improve);
+                ev = fe.full_eval(sol);
+                current_fitness = ev.fitness();
+                current_feasible = ev.feasible();
+            }
+            recompute_costs();
+        }
     }
 
     fe.optimize_rooms(best_sol);
@@ -284,5 +250,5 @@ inline AlgoResult solve_sa(
                   << " hard=" << final_ev.hard()
                   << " soft=" << final_ev.soft() << std::endl;
 
-    return {std::move(best_sol), final_ev, rt, iters_done, "Simulated Annealing"};
+    return {std::move(best_sol), final_ev, rt, iters_done, "Multi-Neighbourhood SA"};
 }

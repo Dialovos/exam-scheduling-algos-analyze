@@ -1,9 +1,7 @@
 /*
- * abc.h — Artificial Bee Colony
- *
- * Bio-inspired swarm optimization with three phases per iteration:
+ * Artificial bee colony with three phases per iteration:
  *   1. Employed bees:  multi-move local search on each food source (k=3 moves)
- *   2. Onlooker bees:  fitness-proportional selection + crossover-inspired transfer
+ *   2. Onlooker bees:  fitness-proportional selection + crossover transfer
  *   3. Scout bees:     copy-and-perturb best source instead of random restart
  *
  * Uses move_delta for O(k) neighbor evaluation with periodic full_eval resync.
@@ -14,6 +12,7 @@
 #include "models.h"
 #include "evaluator.h"
 #include "greedy.h"
+#include "neighbourhoods.h"
 
 #include <algorithm>
 #include <chrono>
@@ -119,7 +118,7 @@ inline int cost_weighted_pick(
 
 inline AlgoResult solve_abc(
     const ProblemInstance& prob,
-    int colony_size    = 30,
+    int colony_size    = 15,
     int max_iterations = 3000,
     int abandon_limit  = 0,
     int seed           = 42,
@@ -183,49 +182,119 @@ inline AlgoResult solve_abc(
 
     std::uniform_int_distribution<int> de(0, ne - 1);
     std::uniform_real_distribution<double> unif(0.0, 1.0);
-    int moves_per_bee = 3;  // multi-move: each bee tries k moves
+    int moves_per_bee = 6;  // multi-move: each bee tries k moves
     int iters_done = 0;
 
-    // Per-source exam costs (recomputed periodically)
+    // Per-source exam costs + alias tables (O(1) sampling)
     std::vector<std::vector<double>> source_costs(colony_size, std::vector<double>(ne, 1.0));
+    std::vector<AliasTable> source_alias(colony_size);
+    std::vector<bool> alias_dirty(colony_size, true);
 
     for (int it = 0; it < max_iterations; it++) {
         iters_done = it + 1;
+        std::vector<bool> changed_this_iter(colony_size, false);
 
-        // Recompute exam costs periodically for targeted selection
-        if (it % 100 == 0) {
-            for (int i = 0; i < colony_size; i++)
+        // Recompute exam costs + rebuild alias tables only for dirty sources
+        if (it % 100 == 0)
+            std::fill(alias_dirty.begin(), alias_dirty.end(), true);
+        for (int i = 0; i < colony_size; i++) {
+            if (alias_dirty[i]) {
                 compute_exam_costs(sources[i], fe, prob, ne, source_costs[i]);
+                source_alias[i].build(source_costs[i]);
+                alias_dirty[i] = false;
+            }
         }
 
-        // ── Employed Bee Phase: multi-move local search ───────
+        // ── Employed Bee Phase: mixed neighbourhood local search ──
         for (int i = 0; i < colony_size; i++) {
             bool improved = false;
 
             for (int m = 0; m < moves_per_bee; m++) {
-                // Pick exam weighted by cost (target expensive exams)
-                int eid = cost_weighted_pick(source_costs[i], ne, rng);
-                auto& vp = valid_p[eid]; auto& vr = valid_r[eid];
-                if (vp.empty() || vr.empty()) continue;
+                if (m < 3) {
+                    // Single-exam move (with knowledge transfer)
+                    int eid = source_alias[i].sample(rng);
+                    auto& vp = valid_p[eid]; auto& vr = valid_r[eid];
+                    if (vp.empty() || vr.empty()) continue;
 
-                // Knowledge transfer: take period from random other source
-                int k = (int)(rng() % colony_size);
-                if (k == i) k = (k + 1) % colony_size;
+                    int k = (int)(rng() % colony_size);
+                    if (k == i) k = (k + 1) % colony_size;
 
-                int new_pid, new_rid;
-                if (unif(rng) < 0.5 && sources[k].period_of[eid] >= 0) {
-                    new_pid = sources[k].period_of[eid];
-                    new_rid = vr[rng() % vr.size()];
+                    int new_pid, new_rid;
+                    if (unif(rng) < 0.5 && sources[k].period_of[eid] >= 0) {
+                        new_pid = sources[k].period_of[eid];
+                        new_rid = vr[rng() % vr.size()];
+                    } else {
+                        new_pid = vp[rng() % vp.size()];
+                        new_rid = vr[rng() % vr.size()];
+                    }
+
+                    double delta = fe.move_delta(sources[i], eid, new_pid, new_rid);
+                    if (delta < 0) {
+                        fe.apply_move(sources[i], eid, new_pid, new_rid);
+                        fitness[i] += delta;
+                        improved = true;
+                        alias_dirty[i] = true;
+                        changed_this_iter[i] = true;
+                    }
+                } else if (m == 3 && ne > 1) {
+                    // Swap move
+                    int ea = source_alias[i].sample(rng);
+                    int eb = source_alias[i].sample(rng);
+                    if (ea == eb) continue;
+                    int pa = sources[i].period_of[ea], ra = sources[i].room_of[ea];
+                    int pb = sources[i].period_of[eb], rb = sources[i].room_of[eb];
+                    if (pa < 0 || pb < 0 || pa == pb) continue;
+                    if (fe.exam_dur[ea] > fe.period_dur[pb] || fe.exam_dur[eb] > fe.period_dur[pa]) continue;
+                    double d1 = fe.move_delta(sources[i], ea, pb, ra);
+                    fe.apply_move(sources[i], ea, pb, ra);
+                    double d2 = fe.move_delta(sources[i], eb, pa, rb);
+                    double td = d1 + d2;
+                    if (td < 0) {
+                        fe.apply_move(sources[i], eb, pa, rb);
+                        fitness[i] += td;
+                        improved = true;
+                        alias_dirty[i] = true;
+                        changed_this_iter[i] = true;
+                    } else {
+                        fe.apply_move(sources[i], ea, pa, ra); // undo
+                    }
+                } else if (m == 4) {
+                    // Kempe chain move
+                    int kseed = source_alias[i].sample(rng);
+                    int kp1 = sources[i].period_of[kseed]; if (kp1 < 0) continue;
+                    int kp2 = std::uniform_int_distribution<int>(0, np - 1)(rng);
+                    if (kp2 == kp1) continue;
+                    auto chain = kempe_detail::build_chain(sources[i], prob.adj, ne, kseed, kp1, kp2);
+                    if (chain.empty() || (int)chain.size() > ne / 4) continue;
+                    auto old_pe = fe.partial_eval(sources[i], chain);
+                    auto undo = kempe_detail::apply_chain(sources[i], chain, kp1, kp2);
+                    auto new_pe = fe.partial_eval(sources[i], chain);
+                    double kd = new_pe.fitness() - old_pe.fitness();
+                    if (kd < 0) {
+                        fitness[i] += kd;
+                        improved = true;
+                        alias_dirty[i] = true;
+                        changed_this_iter[i] = true;
+                    } else {
+                        kempe_detail::undo_chain(sources[i], undo);
+                    }
                 } else {
-                    new_pid = vp[rng() % vp.size()];
-                    new_rid = vr[rng() % vr.size()];
-                }
-
-                double delta = fe.move_delta(sources[i], eid, new_pid, new_rid);
-                if (delta < 0) {
-                    fe.apply_move(sources[i], eid, new_pid, new_rid);
-                    fitness[i] += delta;
-                    improved = true;
+                    // Room-only move
+                    if (nr <= 1) continue;
+                    int eid = source_alias[i].sample(rng);
+                    auto& vr = valid_r[eid];
+                    if (vr.empty()) continue;
+                    int pid = sources[i].period_of[eid]; if (pid < 0) continue;
+                    int new_rid = vr[rng() % vr.size()];
+                    if (new_rid == sources[i].room_of[eid]) continue;
+                    double delta = fe.move_delta(sources[i], eid, pid, new_rid);
+                    if (delta < 0) {
+                        fe.apply_move(sources[i], eid, pid, new_rid);
+                        fitness[i] += delta;
+                        improved = true;
+                        alias_dirty[i] = true;
+                        changed_this_iter[i] = true;
+                    }
                 }
             }
 
@@ -233,7 +302,7 @@ inline AlgoResult solve_abc(
             else trials[i]++;
         }
 
-        // ── Onlooker Bee Phase: fitness-proportional + multi-move ──
+        // ── Onlooker Bee Phase: fitness-proportional + LAHC acceptance ──
         double max_fit = *std::max_element(fitness.begin(), fitness.end());
         std::vector<double> probs(colony_size);
         double sum_prob = 0;
@@ -251,9 +320,14 @@ inline AlgoResult solve_abc(
                 if (r <= acc) { sel = i; break; }
             }
 
+            // LAHC history for this onlooker pass
+            int lahc_len = std::max(ne / 10, 20);
+            std::vector<double> lahc_hist(lahc_len, fitness[sel]);
+            int lahc_idx = 0;
+
             bool improved = false;
             for (int m = 0; m < moves_per_bee; m++) {
-                int eid = cost_weighted_pick(source_costs[sel], ne, rng);
+                int eid = source_alias[sel].sample(rng);
                 auto& vp = valid_p[eid]; auto& vr = valid_r[eid];
                 if (vp.empty() || vr.empty()) continue;
 
@@ -270,49 +344,49 @@ inline AlgoResult solve_abc(
                 }
 
                 double delta = fe.move_delta(sources[sel], eid, new_pid, new_rid);
-                if (delta < 0) {
+                double new_fit = fitness[sel] + delta;
+                // LAHC acceptance: improving OR no worse than lahc_len steps ago
+                bool accept = (new_fit <= fitness[sel]) ||
+                              (new_fit <= lahc_hist[lahc_idx % lahc_len]);
+                if (accept) {
                     fe.apply_move(sources[sel], eid, new_pid, new_rid);
                     fitness[sel] += delta;
                     improved = true;
+                    alias_dirty[sel] = true;
+                    changed_this_iter[sel] = true;
                 }
+                lahc_hist[lahc_idx % lahc_len] = fitness[sel];
+                lahc_idx++;
             }
 
             if (improved) trials[sel] = 0;
             else trials[sel]++;
         }
 
-        // ── Scout Bee Phase: copy-and-perturb best instead of random restart ──
+        // ── Scout Bee Phase: guided DSatur restart for diversity ──
         for (int i = 0; i < colony_size; i++) {
             if (trials[i] > abandon_limit) {
-                // Find current best source
-                int cur_best = (int)(std::min_element(fitness.begin(), fitness.end()) - fitness.begin());
-                // Copy best and apply random perturbation
-                sources[i] = sources[cur_best].copy();
-                fitness[i] = fitness[cur_best];
-
-                int n_perturb = std::max(3, ne / 10);
-                for (int p = 0; p < n_perturb; p++) {
-                    int eid = de(rng);
-                    auto& vp = valid_p[eid]; auto& vr = valid_r[eid];
-                    if (vp.empty() || vr.empty()) continue;
-                    int pid = vp[rng() % vp.size()];
-                    int rid = vr[rng() % vr.size()];
-                    double delta = fe.move_delta(sources[i], eid, pid, rid);
-                    fe.apply_move(sources[i], eid, pid, rid);
-                    fitness[i] += delta;
-                }
+                // Generate a fresh random-seed greedy solution for diversity
+                auto fresh = random_solution(prob, fe, ne, np, nr, valid_p, valid_r, rng);
+                auto fresh_ev = fe.full_eval(fresh);
+                sources[i] = std::move(fresh);
+                fitness[i] = fresh_ev.fitness();
+                alias_dirty[i] = true;
                 trials[i] = 0;
+                changed_this_iter[i] = true;
             }
         }
 
-        // Periodic resync
-        if ((it + 1) % 50 == 0)
-            for (int i = 0; i < colony_size; i++)
-                fitness[i] = fe.full_eval(sources[i]).fitness();
+        // Periodic resync — stagger across iterations to avoid syncing
+        // all sources in the same iteration (amortizes the cost).
+        if ((it + 1) % 10 == 0) {
+            int slot = ((it + 1) / 10) % colony_size;
+            fitness[slot] = fe.full_eval(sources[slot]).fitness();
+        }
 
-        // Update global best (feasibility-first)
+        // Update global best — only check sources that changed this iteration
         for (int i = 0; i < colony_size; i++) {
-            if (fitness[i] < best_fitness - 0.5) {
+            if (changed_this_iter[i] && fitness[i] < best_fitness - 0.5) {
                 auto check = fe.full_eval(sources[i]);
                 bool cf = check.feasible();
                 bool dominated = (best_feasible && !cf);

@@ -1,7 +1,5 @@
 """
-Artificial Bee Colony
-=====================
-Bio-inspired swarm optimization with employed, onlooker, and scout phases.
+Swarm optimization with employed, onlooker, and scout bee phases.
 Uses move_delta for O(k) neighbor evaluation.
 """
 

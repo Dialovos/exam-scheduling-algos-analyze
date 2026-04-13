@@ -1,8 +1,8 @@
 /*
- * greedy.h — DSatur Greedy with Multi-Start & Chain Repair
+ * DSatur greedy with multi-start and chain repair.
  *
  * 1. Pre-place room-dominating exams (>50% of max room capacity)
- * 2. DSatur ordering: pick exam with highest saturation + room pressure
+ * 2. DSatur ordering: highest saturation + room pressure first
  * 3. Displacement repair when stuck (move blockers)
  * 4. Chain-move room overflow repair
  * 5. Delta-based general repair for remaining violations

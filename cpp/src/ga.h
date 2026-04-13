@@ -1,9 +1,9 @@
 /*
- * ga.h — Memetic Genetic Algorithm
+ * Memetic genetic algorithm with delta-based evaluation.
  *
- * Delta-based evaluation throughout (no per-offspring full_eval):
- *   - Period-swap crossover: transfer random period groups from parent B
- *   - Local-search mutation: first-improvement moves via move_delta
+ * No per-offspring full_eval — delta throughout:
+ *   - Period-swap crossover: transfer period groups from parent B
+ *   - Local-search mutation: first-improvement via move_delta
  *   - Periodic full_eval resync every 25 generations
  *
  * Feasibility-first best tracking across all generations.
@@ -14,6 +14,7 @@
 #include "models.h"
 #include "evaluator.h"
 #include "greedy.h"
+#include "neighbourhoods.h"
 
 #include <algorithm>
 #include <chrono>
@@ -83,9 +84,9 @@ inline int tournament_select(
     return best;
 }
 
-// Delta-based crossover: start from parent A, selectively adopt parent B's assignments.
-// Uses move_delta for incremental cost tracking — no full_eval needed.
-inline double crossover_delta(
+// Saturation-degree crossover: selectively adopt parent B's improving assignments.
+// Only transfers genes that reduce child's cost (conflict-aware selection).
+inline double crossover_satdegree(
     Solution& child, double child_fit,
     const Solution& parent_b,
     const FastEvaluator& fe,
@@ -93,7 +94,44 @@ inline double crossover_delta(
     double swap_fraction,
     std::mt19937& rng)
 {
-    // Select random exams to transfer from parent B
+    // Scan all exams for improvements from parent B
+    std::vector<std::pair<double, int>> improvements;
+    for (int eid = 0; eid < ne; eid++) {
+        int b_pid = parent_b.period_of[eid];
+        int b_rid = parent_b.room_of[eid];
+        if (b_pid < 0) continue;
+        if (b_pid == child.period_of[eid] && b_rid == child.room_of[eid]) continue;
+
+        double delta = fe.move_delta(child, eid, b_pid, b_rid);
+        if (delta < 0) improvements.push_back({delta, eid});
+    }
+
+    // Sort by improvement magnitude, take top swap_fraction
+    std::sort(improvements.begin(), improvements.end());
+    int n_swap = std::max(1, (int)(ne * swap_fraction));
+    n_swap = std::min(n_swap, (int)improvements.size());
+
+    for (int i = 0; i < n_swap; i++) {
+        int eid = improvements[i].second;
+        int b_pid = parent_b.period_of[eid];
+        int b_rid = parent_b.room_of[eid];
+        // Recompute delta since earlier transfers may have changed landscape
+        double delta = fe.move_delta(child, eid, b_pid, b_rid);
+        fe.apply_move(child, eid, b_pid, b_rid);
+        child_fit += delta;
+    }
+    return child_fit;
+}
+
+// Random crossover fallback: transfer random subset from parent B (exploration).
+inline double crossover_random(
+    Solution& child, double child_fit,
+    const Solution& parent_b,
+    const FastEvaluator& fe,
+    int ne, int np,
+    double swap_fraction,
+    std::mt19937& rng)
+{
     int n_swap = std::max(1, (int)(ne * swap_fraction));
     std::vector<int> exams(ne);
     std::iota(exams.begin(), exams.end(), 0);
@@ -105,7 +143,6 @@ inline double crossover_delta(
         int b_rid = parent_b.room_of[eid];
         if (b_pid < 0) continue;
         if (b_pid == child.period_of[eid] && b_rid == child.room_of[eid]) continue;
-
         double delta = fe.move_delta(child, eid, b_pid, b_rid);
         fe.apply_move(child, eid, b_pid, b_rid);
         child_fit += delta;
@@ -132,7 +169,7 @@ inline double local_search_mutation(
         if (vp.empty() || vr.empty()) continue;
 
         // Try a few random (period, room) pairs, accept first improvement
-        int tries = std::min(5, (int)(vp.size() * vr.size()));
+        int tries = std::min(3, (int)(vp.size() * vr.size()));
         for (int t = 0; t < tries; t++) {
             int pid = vp[rng() % vp.size()];
             int rid = vr[rng() % vr.size()];
@@ -213,8 +250,15 @@ inline AlgoResult solve_ga(
 
     std::uniform_real_distribution<double> unif(0.0, 1.0);
     int elite_count = std::max(2, pop_size / 10);
-    int ls_steps = std::max(5, ne / 20);  // local search steps per offspring
+    int ls_steps = std::max(10, ne / 5);  // local search steps per offspring
     int iters_done = 0;
+
+    // Double-buffer: reuse vectors across generations to avoid allocation
+    std::vector<Solution> buf_pop;
+    std::vector<double> buf_fit;
+    buf_pop.reserve(pop_size);
+    buf_fit.reserve(pop_size);
+    int no_improve_gens = 0;
 
     for (int gen = 0; gen < max_generations; gen++) {
         iters_done = gen + 1;
@@ -225,19 +269,19 @@ inline AlgoResult solve_ga(
         std::sort(rank.begin(), rank.end(),
                   [&](int a, int b) { return fitness[a] < fitness[b]; });
 
-        std::vector<Solution> new_pop;
-        std::vector<double> new_fit;
-        new_pop.reserve(pop_size);
-        new_fit.reserve(pop_size);
+        buf_pop.clear();
+        buf_fit.clear();
 
-        // Elitism
+        // Elitism — move elites (they won't be used as parents after this
+        // since offspring are generated from the rank[] indices that point
+        // into the original population, so we must copy not move).
         for (int i = 0; i < elite_count; i++) {
-            new_pop.push_back(population[rank[i]].copy());
-            new_fit.push_back(fitness[rank[i]]);
+            buf_pop.push_back(population[rank[i]].copy());
+            buf_fit.push_back(fitness[rank[i]]);
         }
 
         // Generate offspring using delta-based evaluation
-        while ((int)new_pop.size() < pop_size) {
+        while ((int)buf_pop.size() < pop_size) {
             int p1 = tournament_select(fitness, pop_size, 3, rng);
             int p2 = tournament_select(fitness, pop_size, 3, rng);
 
@@ -248,29 +292,66 @@ inline AlgoResult solve_ga(
             Solution child = population[donor].copy();
             double child_fit = fitness[donor];
 
-            // Crossover: transfer assignments from other parent via move_delta
+            // Crossover: 70% saturation-degree, 30% random (for diversity)
             if (unif(rng) < crossover_rate) {
-                double swap_frac = 0.2 + unif(rng) * 0.3; // 20-50% of exams
-                child_fit = crossover_delta(
-                    child, child_fit, population[other],
-                    fe, ne, np, swap_frac, rng);
+                double swap_frac = 0.2 + unif(rng) * 0.3;
+                if (unif(rng) < 0.7)
+                    child_fit = crossover_satdegree(
+                        child, child_fit, population[other],
+                        fe, ne, np, swap_frac, rng);
+                else
+                    child_fit = crossover_random(
+                        child, child_fit, population[other],
+                        fe, ne, np, swap_frac, rng);
             }
 
-            // Mutation: local search — always apply (this is what makes it memetic)
+            // Mutation: local search — always apply (memetic)
             child_fit = local_search_mutation(
                 child, child_fit, fe, ne, valid_p, valid_r, ls_steps, rng);
 
-            new_fit.push_back(child_fit);
-            new_pop.push_back(std::move(child));
+            // Kempe chain mutation (30% probability)
+            if (unif(rng) < 0.3) {
+                int kseed = rng() % ne;
+                int kp1 = child.period_of[kseed];
+                if (kp1 >= 0) {
+                    int kp2 = rng() % np;
+                    if (kp2 != kp1) {
+                        auto chain = kempe_detail::build_chain(child, prob.adj, ne, kseed, kp1, kp2);
+                        if (!chain.empty() && (int)chain.size() <= ne / 4) {
+                            auto old_pe = fe.partial_eval(child, chain);
+                            kempe_detail::apply_chain(child, chain, kp1, kp2);
+                            auto new_pe = fe.partial_eval(child, chain);
+                            child_fit += new_pe.fitness() - old_pe.fitness();
+                        }
+                    }
+                }
+            }
+
+            // Fitness-distance diversity: reject if too similar to elites
+            bool too_similar = false;
+            for (int i = 0; i < elite_count && !too_similar; i++) {
+                int hamming = 0;
+                for (int e = 0; e < ne; e++)
+                    if (child.period_of[e] != buf_pop[i].period_of[e]) hamming++;
+                if (hamming < ne / 10) too_similar = true;
+            }
+            if (too_similar) {
+                buf_pop.push_back(population[donor].copy());
+                buf_fit.push_back(fitness[donor]);
+            } else {
+                buf_fit.push_back(child_fit);
+                buf_pop.push_back(std::move(child));
+            }
         }
 
-        population = std::move(new_pop);
-        fitness = std::move(new_fit);
+        std::swap(population, buf_pop);
+        std::swap(fitness, buf_fit);
 
-        // Periodic resync with full_eval to correct delta drift
-        if ((gen + 1) % 25 == 0) {
-            for (int i = 0; i < pop_size; i++)
-                fitness[i] = fe.full_eval(population[i]).fitness();
+        // Periodic resync — stagger across generations to avoid syncing
+        // all members in the same generation (amortizes the cost).
+        if ((gen + 1) % 10 == 0) {
+            int slot = ((gen + 1) / 5) % pop_size;
+            fitness[slot] = fe.full_eval(population[slot]).fitness();
         }
 
         // Update global best
@@ -283,10 +364,23 @@ inline AlgoResult solve_ga(
                 best_sol = population[gen_best].copy();
                 best_fitness = check.fitness();
                 best_feasible = cf;
+                no_improve_gens = 0;
                 if (verbose && (gen < 10 || gen % 100 == 0))
                     std::cerr << "[GA] Gen " << gen << ": best hard=" << check.hard()
                               << " soft=" << check.soft() << std::endl;
+            } else {
+                no_improve_gens++;
             }
+        } else {
+            no_improve_gens++;
+        }
+
+        // Early stop: plateau for 20% of max_generations with no improvement
+        if (no_improve_gens > std::max(50, max_generations / 5)) {
+            if (verbose)
+                std::cerr << "[GA] Converged at gen " << gen
+                          << " (no improvement for " << no_improve_gens << " gens)" << std::endl;
+            break;
         }
     }
 

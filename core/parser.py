@@ -1,13 +1,11 @@
 """
-Parser:
-Format specification from the ITC 2007 technical report (McCollum et al., 2007).
-File sections:
-  [Exams:N]           - N lines: duration, student1, student2, ...
-  [Periods:N]         - N lines: date, time, duration, penalty
-  [Rooms:N]           - N lines: capacity, penalty
-  [PeriodHardConstraints] - lines: exam1, type, exam2
-  [RoomHardConstraints]   - lines: exam, ROOM_EXCLUSIVE
-  [InstitutionalWeightings] - key:value pairs
+ITC 2007 .exam file parser. Sections:
+  [Exams:N]                 — duration, student1, student2, ...
+  [Periods:N]               — date, time, duration, penalty
+  [Rooms:N]                 — capacity, penalty
+  [PeriodHardConstraints]   — exam1, type, exam2
+  [RoomHardConstraints]     — exam, ROOM_EXCLUSIVE
+  [InstitutionalWeightings] — key:value pairs
 """
 
 from core.models import (

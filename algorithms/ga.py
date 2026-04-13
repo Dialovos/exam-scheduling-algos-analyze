@@ -1,7 +1,5 @@
 """
-Genetic Algorithm
-=================
-Classic evolutionary algorithm with tournament selection,
+Evolutionary algorithm with tournament selection,
 uniform crossover, mutation, and elitism.
 """
 
