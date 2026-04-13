@@ -17,13 +17,13 @@
 ---
 
 ## Table of Contents
-- [The Problem & Approach](#the-problem--approach)
+- [Abstract](#abstract)
 - [Quick Start](#quick-start)
-- [The Algorithms](#the-algorithms)
+- [Algorithms](#algorithms)
 - [Datasets](#datasets)
-- [Performance Results](#performance-results)
-- [Auto-Tuner Pipeline](#auto-tuner-pipeline)
-- [Usage & CLI Reference](#usage--cli-reference)
+- [Results](#results)
+- [Auto-Tuner](#auto-tuner)
+- [Usage](#usage)
 - [GenAI Usage Disclosure](#genai-usage-disclosure)
 - [References](#references)
 
