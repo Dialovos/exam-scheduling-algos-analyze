@@ -5,8 +5,7 @@
 </p>
 
 <p align="center">
-  <i>Twelve algorithms, one C++ solver, eight ITC 2007 datasets —<br/>
-  all fighting over where to put next semester's exams.</i>
+  <i>Eight ITC 2007 datasets.</i>
 </p>
 
 <p align="center">
