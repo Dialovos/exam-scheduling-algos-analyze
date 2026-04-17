@@ -481,12 +481,15 @@ def run_cpp_solver(
 # Chain execution (warm-started multi-step runs with memory capture)
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def run_chain(dataset, chain_steps, seed=42, work_dir=None, timeout_per_step=300):
+def run_chain(dataset, chain_steps, seed=42, work_dir=None,
+              timeout_per_step=300, allow_partial=False,
+              abort_threshold_soft=None, prefix_cache_dir=None):
     """Run a warm-started chain of algorithms with per-step memory tracking.
 
-    Each step writes its solution file; the next step reads it via --init-solution.
-    Memory is captured by polling /proc/<pid>/status for VmHWM (peak RSS) in
-    a watchdog thread while each subprocess runs. Linux-only (WSL2 OK).
+    Each step writes its solution file; the next step reads it via
+    ``--init-solution``. Memory is captured by polling
+    ``/proc/<pid>/status`` for VmHWM (peak RSS) in a watchdog thread while
+    each subprocess runs. Linux-only (WSL2 OK).
 
     Args:
         dataset: Path to an ITC 2007 .exam file.
@@ -496,15 +499,31 @@ def run_chain(dataset, chain_steps, seed=42, work_dir=None, timeout_per_step=300
         work_dir: Scratch directory for intermediate .sln files. If None,
             a temp directory is created and removed automatically.
         timeout_per_step: Per-step subprocess timeout in seconds.
+        allow_partial: If True, step failures after step 0 return the last
+            successful step's result with a ``chain_truncated=True`` flag
+            and ``truncated_at_step``/``failure_reason`` metadata — the
+            research-honest fallback so chains aren't discarded whole on a
+            single bad step. Default False preserves legacy behavior.
+        abort_threshold_soft: Optional per-dataset soft-penalty cutoff. If a
+            feasible intermediate step's soft penalty exceeds this AND there
+            is at least one more step, abort the chain early — saves wall
+            time on clearly-unworthy chains. Never applied to the final
+            step or to infeasible steps (where a later repair step may fix
+            things).
+        prefix_cache_dir: Optional path to an on-disk :class:`PrefixCache`
+            directory. When set, the chain tries to skip prefix steps that
+            have already been computed for the same (sequence, ds, seed).
 
     Returns:
         dict with keys:
-            soft_penalty     — int, from final step
-            hard_violations  — int, from final step
-            total_runtime    — float, sum of per-step runtimes (seconds)
-            memory_peak_mb   — float, max RSS observed across steps (MB)
-            per_step         — list of {algo, runtime, memory_mb}
-        Returns None if any step fails (timeout, bad JSON, non-zero exit).
+            soft_penalty, hard_violations, total_runtime, memory_peak_mb,
+            per_step, algorithm, runtime, evaluation, iterations.
+        If truncated (via allow_partial or abort_threshold_soft):
+            chain_truncated=True, truncated_at_step=<int>,
+            failure_reason=<'timeout'|'nonzero_exit'|'bad_json'|'spawn_error'
+                            |'abort_unworthy'>.
+        Returns None only when step 0 fails (no successful step to report)
+        or when ``allow_partial=False`` and any step fails.
     """
     import glob as _glob
     import shutil as _shutil
@@ -522,14 +541,75 @@ def run_chain(dataset, chain_steps, seed=42, work_dir=None, timeout_per_step=300
     else:
         os.makedirs(work_dir, exist_ok=True)
 
+    prefix_cache = None
+    if prefix_cache_dir:
+        try:
+            from tooling.chain_prefix_cache import PrefixCache
+            prefix_cache = PrefixCache(cache_dir=prefix_cache_dir)
+        except ImportError:
+            prefix_cache = None
+
+    # Short tag used in progress lines so the user can correlate log events
+    # with the chain + dataset + seed that emitted them.
+    _ds_short = os.path.basename(dataset).replace('.exam', '')
+    _chain_tag = '→'.join(a for a, _ in chain_steps)
+
+    def _wrap_truncated(last_success, per_step_so_far, failed_at, reason):
+        total_runtime = sum(s['runtime'] for s in per_step_so_far)
+        mem_peak = max((s['memory_mb'] for s in per_step_so_far), default=0.0)
+        chain_label = ('Chain(' + '→'.join(s['algo'] for s in per_step_so_far)
+                       + f'|T@{failed_at})')
+        return {
+            'soft_penalty': int(last_success.get('soft_penalty', 0)),
+            'hard_violations': int(last_success.get('hard_violations', 0)),
+            'total_runtime': total_runtime,
+            'memory_peak_mb': mem_peak,
+            'per_step': per_step_so_far,
+            'algorithm': chain_label,
+            'runtime': total_runtime,
+            'evaluation': _parse_eval(last_success),
+            'iterations': sum(int(s.get('iterations', 0) or 0) for s in per_step_so_far),
+            'chain_truncated': True,
+            'truncated_at_step': failed_at,
+            'failure_reason': reason,
+        }
+
     try:
         import threading as _threading
 
         sln_path = None
         per_step = []
         final_result = None
+        last_success = None
+
+        def _fail_or_partial(reason: str, step_idx: int):
+            """Return partial-credit dict when allowed, else None."""
+            if allow_partial and step_idx >= 1 and last_success is not None:
+                print(f"[chain-partial] {_ds_short} seed={seed} "
+                      f"[{_chain_tag}] trunc@step{step_idx} ({reason})",
+                      flush=True)
+                return _wrap_truncated(last_success, list(per_step),
+                                       step_idx, reason)
+            return None
 
         for i, (algo, params) in enumerate(chain_steps):
+            # Prefix cache: if the prior steps are cached, skip to this one.
+            # Only try the cache when i >= 1 (i.e., there IS a prefix) and
+            # we don't already have a sln_path from an executed prior step.
+            if prefix_cache is not None and i >= 1 and sln_path is None:
+                prefix = list(chain_steps[:i])
+                hit = prefix_cache.lookup(prefix, dataset, seed)
+                if hit is not None and os.path.isfile(hit['sln_path']):
+                    sln_path = hit['sln_path']
+                    last_success = hit
+                    # Reconstruct per_step entries from cached result
+                    cached_per_step = hit.get('per_step', [])
+                    if cached_per_step:
+                        per_step.extend(cached_per_step)
+                    final_result = hit
+                    print(f"[prefix-cache HIT] {_ds_short} seed={seed} "
+                          f"skip {i} step(s) [{_chain_tag}]", flush=True)
+
             step_dir = os.path.join(work_dir, f'step_{i}_{algo}')
             os.makedirs(step_dir, exist_ok=True)
 
@@ -544,7 +624,7 @@ def run_chain(dataset, chain_steps, seed=42, work_dir=None, timeout_per_step=300
                 proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
                                         stderr=subprocess.PIPE, text=True)
             except OSError:
-                return None
+                return _fail_or_partial('spawn_error', i)
 
             # Watchdog thread polls /proc/<pid>/status for VmHWM (peak RSS).
             # VmHWM is monotone-non-decreasing, so even a coarse poll captures
@@ -573,23 +653,27 @@ def run_chain(dataset, chain_steps, seed=42, work_dir=None, timeout_per_step=300
                 stdout_data, _stderr = proc.communicate(timeout=timeout_per_step)
             except subprocess.TimeoutExpired:
                 proc.kill()
-                proc.communicate()
+                try:
+                    proc.communicate()
+                except Exception:
+                    pass
                 stop_poll.set()
-                return None
+                poller.join(timeout=0.1)
+                return _fail_or_partial('timeout', i)
             finally:
                 stop_poll.set()
                 poller.join(timeout=0.1)
 
             if proc.returncode != 0:
-                return None
+                return _fail_or_partial('nonzero_exit', i)
 
             try:
                 data = json.loads(stdout_data)
                 if not data:
-                    return None
+                    return _fail_or_partial('bad_json', i)
                 step_result = data[0]
             except (json.JSONDecodeError, IndexError):
-                return None
+                return _fail_or_partial('bad_json', i)
 
             step_mem_mb = peak_kb[0] / 1024.0
 
@@ -599,9 +683,40 @@ def run_chain(dataset, chain_steps, seed=42, work_dir=None, timeout_per_step=300
                 'memory_mb': step_mem_mb,
             })
             final_result = step_result
+            last_success = step_result
 
             sln_files = _glob.glob(os.path.join(step_dir, 'solutions', '*.sln'))
             sln_path = sln_files[0] if sln_files else None
+
+            # Store intermediate prefix in cache (post-step 0, 1, ...), but
+            # NOT after the final step — that's not a prefix of anything.
+            if (prefix_cache is not None and sln_path
+                    and i < len(chain_steps) - 1):
+                try:
+                    prefix_cache.store(
+                        prefix_steps=list(chain_steps[:i + 1]),
+                        dataset=dataset, seed=seed,
+                        sln_path=sln_path,
+                        result={
+                            'soft_penalty': int(step_result.get('soft_penalty', 0)),
+                            'hard_violations': int(step_result.get('hard_violations', 0)),
+                            'runtime': float(step_result.get('runtime', 0.0)),
+                            'per_step': list(per_step),
+                            'evaluation': _parse_eval(step_result),
+                        },
+                    )
+                except Exception:
+                    pass  # cache failures should never break the run
+
+            # Step-level early stop: abort if soft is catastrophically bad.
+            # Never abort on last step, on infeasible steps, or on step 0
+            # (warm-start seeders often look terrible at step 0).
+            if (abort_threshold_soft is not None
+                    and step_result.get('hard_violations', 0) == 0
+                    and step_result.get('soft_penalty', 0) > abort_threshold_soft
+                    and i >= 1
+                    and i < len(chain_steps) - 1):
+                return _fail_or_partial('abort_unworthy', i + 1)
 
         if final_result is None:
             return None

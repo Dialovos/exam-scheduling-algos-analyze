@@ -53,3 +53,27 @@ TUNABLE_ALGOS = list(SEARCH_SPACES.keys())
 # Fixed seed set for fair comparison — every config is tested on the same
 # seeds so score differences reflect param quality, not seed luck.
 EVAL_SEEDS = [42, 123, 789]
+
+# ── Chain-finder v2 knobs ──────────────────────────────────────────
+MAX_CHAIN_LEN = 10
+MIN_CHAIN_LEN = 2
+CHAIN_EARLY_STOP_RATIO = 2.5
+CHAIN_TRUNCATION_PENALTY = 0.025  # 2.5% multiplicative penalty
+CHAIN_CROSSOVER_RATE = 0.25
+
+# Expanded proven chain templates. Params looked up dynamically from
+# best_params at seed-time. Includes the current champion
+# (kempe→alns→kempe→tabu, score 0.9552 on 3 eval datasets as of 2026-04) so
+# future runs don't have to re-discover it via random mutation.
+PROVEN_CHAIN_TEMPLATES = [
+    ('sa', 'gd'),
+    ('sa', 'lahc'),
+    ('tabu', 'sa'),
+    ('kempe', 'sa'),
+    ('sa', 'kempe', 'gd'),
+    ('tabu', 'sa', 'gd'),
+    ('kempe', 'alns', 'kempe', 'tabu'),
+    ('alns', 'sa', 'kempe'),
+    ('vns', 'sa', 'gd'),
+    ('hho', 'sa', 'kempe'),
+]

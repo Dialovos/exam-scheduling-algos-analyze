@@ -16,20 +16,49 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from algorithms.cpp_bridge import run_chain as _bridge_run_chain
+from tooling.tuner.search_spaces import CHAIN_TRUNCATION_PENALTY
 
 
-def run_chain(binary, dataset, chain_steps, seed, work_dir, timeout_per_step=300):
+def _timeout_for_dataset(dataset: str) -> int:
+    """Scale per-step timeout by dataset file size.
+
+    ITC 2007 datasets range ~100KB (set1) to ~3MB (set4/5). A flat 300s
+    leaves small-set chains with excess slack while starving large-set
+    chains near their limit.
+    """
+    try:
+        sz = os.path.getsize(dataset)
+    except OSError:
+        return 300
+    if sz < 200_000:
+        return 180
+    if sz < 1_000_000:
+        return 300
+    return 600
+
+
+def run_chain(binary, dataset, chain_steps, seed, work_dir,
+              timeout_per_step=None, allow_partial=True,
+              abort_threshold_soft=None, prefix_cache_dir=None):
     """Adapter: forwards to cpp_bridge.run_chain.
 
     The `binary` arg is ignored — the bridge auto-discovers the binary path.
     Kept for backward compatibility with existing call sites in this module.
+
+    If ``timeout_per_step`` is None, it's auto-scaled based on dataset size
+    via :func:`_timeout_for_dataset`.
     """
+    if timeout_per_step is None:
+        timeout_per_step = _timeout_for_dataset(dataset)
     return _bridge_run_chain(
         dataset=dataset,
         chain_steps=chain_steps,
         seed=seed,
         work_dir=work_dir,
         timeout_per_step=timeout_per_step,
+        allow_partial=allow_partial,
+        abort_threshold_soft=abort_threshold_soft,
+        prefix_cache_dir=prefix_cache_dir,
     )
 
 
@@ -51,14 +80,24 @@ def run_single_algo(binary, dataset, algo, params, seed, work_dir, timeout=300):
 
 
 def compute_score(result):
-    """Lower is better. Feasibility-first — hard violations dominate soft."""
+    """Lower is better. Feasibility-first — hard violations dominate soft.
+
+    Truncated chains (partial-credit results with ``chain_truncated=True``)
+    get a small multiplicative penalty (``CHAIN_TRUNCATION_PENALTY``, 2.5%)
+    so a clean chain of similar quality wins ties but truncated chains
+    remain competitive in the search.
+    """
     if result is None:
         return float('inf')
     hard = result.get('hard_violations', 0)
     soft = result.get('soft_penalty', 0)
     if hard > 0:
-        return 1e9 + hard * 1e6 + soft
-    return float(soft)
+        base = 1e9 + hard * 1e6 + soft
+    else:
+        base = float(soft)
+    if result.get('chain_truncated'):
+        return base * (1.0 + CHAIN_TRUNCATION_PENALTY)
+    return base
 
 
 def eval_on_datasets(binary, datasets, algo, params, seed, work_dir,

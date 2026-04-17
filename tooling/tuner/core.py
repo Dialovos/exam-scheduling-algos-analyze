@@ -25,6 +25,7 @@ from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_compl
 from datetime import datetime
 from pathlib import Path
 
+from tooling.chain_prefix_cache import PrefixCache
 from tooling.eval_cache import EvalCache
 from tooling.optimizers import optimize_params
 from tooling.successive_halving import successive_halving
@@ -36,10 +37,30 @@ from tooling.tuner.eval import (
     eval_on_datasets, eval_chain_on_datasets,
     eval_multi_seed, eval_multi_seed_datasets,
 )
-from tooling.tuner.sampling import perturb, random_chain, mutate_chain
+from tooling.tuner.sampling import perturb, random_chain, mutate_chain, vary_chain
 from tooling.tuner.search_spaces import (
-    DEFAULT_PARAMS, EVAL_SEEDS, SEARCH_SPACES, TUNABLE_ALGOS,
+    CHAIN_EARLY_STOP_RATIO, DEFAULT_PARAMS, EVAL_SEEDS,
+    PROVEN_CHAIN_TEMPLATES, SEARCH_SPACES, TUNABLE_ALGOS,
 )
+
+
+def _cap_workers(n_items: int, max_workers: int) -> int:
+    """Clamp ThreadPool size so parallel subprocess spawns don't exceed
+    the configured max_workers — prevents C++ solver oversubscription."""
+    return max(1, min(n_items, max_workers))
+
+
+def _eta_schedule_for_pop(pop_size: int) -> list[int]:
+    """Pop-size-aware promotion ratios for the 3-rung SH tournament.
+
+    Larger populations cull harder at cheap rungs so we don't waste the
+    expensive-rung budget evaluating clearly-dominated candidates.
+    """
+    if pop_size <= 8:
+        return [2, 2, 2]
+    if pop_size <= 16:
+        return [3, 2, 2]
+    return [4, 3, 2]
 
 
 class AutoTuner:
@@ -49,7 +70,14 @@ class AutoTuner:
                  seed=42, ip_time_limit=120,
                  max_time=None, eval_datasets=3,
                  auto_update=True, force_update=False,
-                 resume=False):
+                 resume=False,
+                 chain_max_len=10, chain_crossover_rate=0.25,
+                 chain_allow_duplicates=False,
+                 chain_prefix_cache=True,
+                 chain_partial_credit=True,
+                 chain_early_stop=True,
+                 chain_early_stop_ratio=2.5,
+                 chain_truncation_penalty=0.025):
         self.datasets = [os.path.abspath(d) for d in datasets]
         self.output_dir = output_dir
         self.max_workers = max_workers
@@ -70,10 +98,24 @@ class AutoTuner:
         self.auto_update = auto_update
         self.force_update = force_update
 
+        # ── Chain-finder v2 knobs ─────────────────────────────
+        self.chain_max_len = chain_max_len
+        self.chain_crossover_rate = chain_crossover_rate
+        self.chain_allow_duplicates = chain_allow_duplicates
+        self.chain_partial_credit = chain_partial_credit
+        self.chain_early_stop = chain_early_stop
+        self.chain_early_stop_ratio = chain_early_stop_ratio
+        # truncation_penalty is read from search_spaces by compute_score
+        # directly — we only store it for reporting/debugging.
+        self.chain_truncation_penalty = chain_truncation_penalty
+
         # Clean stale output on fresh runs to prevent old .sln artifacts
         # from polluting chain warm-starts or confusing results.
+        # Includes 'chains_sh' (actual SH work dir) alongside the legacy
+        # 'chains' name we kept for back-compat.
         if not resume and os.path.isdir(output_dir):
-            for subdir in ('screen', 'param_tune', 'chains', 'final'):
+            for subdir in ('screen', 'param_tune', 'chains',
+                           'chains_sh', 'final'):
                 stale = os.path.join(output_dir, subdir)
                 if os.path.isdir(stale):
                     shutil.rmtree(stale)
@@ -87,6 +129,17 @@ class AutoTuner:
         cache_path = os.path.join(output_dir, 'eval_cache.json')
         self.cache = EvalCache(persist_path=cache_path)
         self.start_time = None
+
+        # ── Prefix .sln cache (Tier A E2) ─────────────────────
+        # Disabled automatically if free disk < 5GB to avoid filling a
+        # Colab session's scratch disk.
+        self.prefix_cache = None
+        if chain_prefix_cache:
+            if PrefixCache.check_disk(output_dir, min_free_gb=5.0):
+                pc_dir = os.path.join(output_dir, 'chains_sh', '_prefix_cache')
+                self.prefix_cache = PrefixCache(pc_dir)
+            else:
+                print(f"[AutoTuner] Free disk < 5GB — prefix cache disabled")
 
         # State
         self.phase = 'init'
@@ -116,6 +169,26 @@ class AutoTuner:
         # Evenly spaced indices
         indices = [int(i * (len(by_size) - 1) / (n - 1)) for i in range(n)]
         return [by_size[i] for i in sorted(set(indices))]
+
+    def _threshold_for(self, ds):
+        """Per-dataset abort threshold for step-level early stop.
+
+        Computed as ``baseline[ds] * ratio`` where ``ratio`` grows as we
+        discover better chains (tighter pruning as the tournament
+        progresses). Returns None if no baseline exists yet — falls back
+        to no abort.
+        """
+        bl = self.baselines.get(ds) if hasattr(self, 'baselines') else None
+        if not bl or bl <= 0 or bl >= 1e9:
+            return None
+        multiplier = self.chain_early_stop_ratio
+        if self.multi and self.best_chain_score < 1e6:
+            # Tighten as we find better chains: use the best normalized
+            # score as a multiplier — but clamp to at least the base ratio
+            # so we never prune more aggressively than intended.
+            multiplier = max(self.chain_early_stop_ratio,
+                             self.best_chain_score * self.chain_early_stop_ratio)
+        return bl * multiplier
 
     def _time_left(self):
         if self.start_time is None:
@@ -423,15 +496,26 @@ class AutoTuner:
                     work_items.append((ds, s))
 
         if work_items:
+            pc_dir = self.prefix_cache.cache_dir if self.prefix_cache else None
+
             def _run(pair):
                 ds, s = pair
                 ds_name = self._ds_label(ds)
                 wd = os.path.join(self.output_dir, 'chains_sh', work_dir_tag,
                                   ds_name, f's{s}')
-                result = run_chain(self.binary, ds, chain, s, wd)
+                threshold = (self._threshold_for(ds)
+                             if self.chain_early_stop else None)
+                result = run_chain(
+                    self.binary, ds, chain, s, wd,
+                    allow_partial=self.chain_partial_credit,
+                    abort_threshold_soft=threshold,
+                    prefix_cache_dir=pc_dir,
+                )
                 return ds, s, result
 
-            with ThreadPoolExecutor(max_workers=len(work_items)) as pool:
+            with ThreadPoolExecutor(
+                    max_workers=_cap_workers(len(work_items),
+                                              self.max_workers)) as pool:
                 for ds, s, result in pool.map(_run, work_items):
                     key = EvalCache.chain_key(ds, s, chain)
                     self.cache.put(key, result)
@@ -484,33 +568,29 @@ class AutoTuner:
 
         population = []
 
-        # Proven combos
-        proven = [
-            [('sa', self.best_params.get('sa', DEFAULT_PARAMS['sa'])),
-             ('gd', self.best_params.get('gd', DEFAULT_PARAMS['gd']))],
-            [('sa', self.best_params.get('sa', DEFAULT_PARAMS['sa'])),
-             ('lahc', self.best_params.get('lahc', DEFAULT_PARAMS['lahc']))],
-            [('tabu', self.best_params.get('tabu', DEFAULT_PARAMS['tabu'])),
-             ('sa', self.best_params.get('sa', DEFAULT_PARAMS['sa']))],
-            [('kempe', self.best_params.get('kempe', DEFAULT_PARAMS['kempe'])),
-             ('sa', self.best_params.get('sa', DEFAULT_PARAMS['sa']))],
-            [('sa', self.best_params.get('sa', DEFAULT_PARAMS['sa'])),
-             ('kempe', self.best_params.get('kempe', DEFAULT_PARAMS['kempe'])),
-             ('gd', self.best_params.get('gd', DEFAULT_PARAMS['gd']))],
-            [('tabu', self.best_params.get('tabu', DEFAULT_PARAMS['tabu'])),
-             ('sa', self.best_params.get('sa', DEFAULT_PARAMS['sa'])),
-             ('gd', self.best_params.get('gd', DEFAULT_PARAMS['gd']))],
-        ]
-        for combo in proven:
-            if all(a in top for a, _ in combo):
-                population.append((combo, float('inf')))
+        # Seed from PROVEN_CHAIN_TEMPLATES (search_spaces is the single source
+        # of truth — includes the current champion kempe→alns→kempe→tabu plus
+        # a handful of ALNS/VNS/HHO-led combos for 2025 roster coverage).
+        seen_seqs = set()
+        for template in PROVEN_CHAIN_TEMPLATES:
+            if not all(a in top for a in template):
+                continue
+            if template in seen_seqs:
+                continue
+            seen_seqs.add(template)
+            combo = [(a, dict(self.best_params.get(a, DEFAULT_PARAMS.get(a, {}))))
+                     for a in template]
+            population.append((combo, float('inf')))
 
+        # Carry best-scoring chains from prior runs (resume case)
         for chain, sc in sorted(self.chain_history, key=lambda x: x[1])[:3]:
             if sc < 1e6:
                 population.append((chain, sc))
 
         while len(population) < self.chain_pop:
-            population.append((random_chain(top, self.best_params, self.rng), float('inf')))
+            population.append((random_chain(
+                top, self.best_params, self.rng,
+                allow_duplicates=self.chain_allow_duplicates), float('inf')))
 
         round_bests = []
 
@@ -550,8 +630,13 @@ class AutoTuner:
                         return float('inf')
                     return self._eval_chain_at_fidelity(chain, n_seeds, n_ds, tag)
 
+                # Adaptive per-rung promotion. Larger populations can afford
+                # aggressive rung-0 pruning (eta=3 or 4) without losing
+                # signal; small populations stay at eta=2 to avoid collapsing
+                # diversity. See _eta_schedule_for_pop docstring.
+                eta_sched = _eta_schedule_for_pop(len(chain_list))
                 winner, winner_score, history = successive_halving(
-                    chain_list, eval_fn, rungs, eta=2)
+                    chain_list, eval_fn, rungs, eta=2, eta_schedule=eta_sched)
 
                 # Record best score seen for each chain across rungs
                 best_by_id = {}
@@ -592,12 +677,22 @@ class AutoTuner:
 
             survivors = population[:max(2, len(population) // 2)]
             new_pop = list(survivors)
+            survivor_chains = [c for c, _ in survivors]
             while len(new_pop) < self.chain_pop:
                 parent = self.rng.choice(survivors)[0]
-                new_pop.append((mutate_chain(parent, top, self.best_params, self.rng),
-                                float('inf')))
+                # vary_chain either mutates (default) or crosses over with
+                # another survivor (probability = chain_crossover_rate).
+                new_chain = vary_chain(
+                    parent, top, self.best_params, self.rng,
+                    survivors=survivor_chains,
+                    crossover_rate=self.chain_crossover_rate,
+                    allow_duplicates=self.chain_allow_duplicates,
+                )
+                new_pop.append((new_chain, float('inf')))
             if rnd % 2 == 1 and len(new_pop) > 2:
-                new_pop[-1] = (random_chain(top, self.best_params, self.rng), float('inf'))
+                new_pop[-1] = (random_chain(
+                    top, self.best_params, self.rng,
+                    allow_duplicates=self.chain_allow_duplicates), float('inf'))
             population = new_pop
 
         self.phase = 'extract'
@@ -727,7 +822,9 @@ class AutoTuner:
                 chain, n_seeds_full, n_ds_full, f'rescore_{i}')
             return i, chain, score
 
-        with ThreadPoolExecutor(max_workers=len(top_rescored)) as pool:
+        with ThreadPoolExecutor(
+                max_workers=_cap_workers(len(top_rescored),
+                                          self.max_workers)) as pool:
             for i, chain, score in pool.map(_rescore, enumerate(top_rescored)):
                 self.total_trials += 1
                 self.chain_history.append((chain, score))
