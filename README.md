@@ -271,6 +271,7 @@ exam-scheduling/
 ├── requirements.txt
 ├── main.py
 ├── exam_scheduling.ipynb
+├── colab_runner.ipynb       # full batch on a Colab VM
 │
 ├── core/
 │   ├── models.py
@@ -322,7 +323,6 @@ exam-scheduling/
 │       └── tuning.py         # sensitivity + trial trajectories
 │
 ├── notebooks/
-│   ├── colab_runner.ipynb    # full batch on a Colab VM
 │   └── COLAB_RUNBOOK.md      # step-by-step "don't mess up your laptop" guide
 │
 ├── instances/
@@ -352,7 +352,7 @@ exam-scheduling/
   on set1, and regenerates `graphs/` from the cached batch.
 - Full benchmark (Colab recommended): follow
   [`notebooks/COLAB_RUNBOOK.md`](notebooks/COLAB_RUNBOOK.md) — it walks
-  through [`notebooks/colab_runner.ipynb`](notebooks/colab_runner.ipynb)
+  through [`colab_runner.ipynb`](colab_runner.ipynb)
   end-to-end, including the post-run step that unzips the batch locally
   and replays `make reproduce` to regenerate figures.
 - CI: every push runs `.github/workflows/reproduce.yml` — compiles the
