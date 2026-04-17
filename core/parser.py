@@ -181,3 +181,29 @@ def write_solution_itc2007(solution, filepath: str):
     with open(filepath, 'w') as f:
         for line in lines:
             f.write(line + "\n")
+
+
+def read_solution_itc2007(filepath: str, problem):
+    """Read an ITC 2007 .sln file back into a Solution (inverse of writer).
+
+    Lines are 'period, room' in exam order; '-1, -1' marks an unassigned exam,
+    which is dropped (no assignment recorded).
+    """
+    from core.models import Solution
+    sol = Solution(problem)
+    with open(filepath) as f:
+        for eid, raw in enumerate(f):
+            raw = raw.strip()
+            if not raw:
+                continue
+            try:
+                pid_str, rid_str = raw.split(',')
+                pid, rid = int(pid_str.strip()), int(rid_str.strip())
+            except ValueError:
+                continue
+            if pid < 0 or rid < 0:
+                continue
+            if eid >= problem.num_exams():
+                break
+            sol.assign(eid, pid, rid)
+    return sol

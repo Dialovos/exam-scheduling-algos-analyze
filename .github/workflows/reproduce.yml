@@ -1,0 +1,57 @@
+name: reproduce
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install build deps
+        run: sudo apt-get update && sudo apt-get install -y build-essential
+
+      - name: Install Python deps
+        run: pip install -r requirements.txt
+
+      - name: Build C++ solver
+        run: make
+
+      - name: Unit tests
+        run: pytest tests/ -x --timeout=120
+
+      - name: Smoke run — Tabu on set1
+        run: |
+          cpp/build/exam_solver instances/exam_comp_set1.exam \
+              --algo tabu --seed 42 --tabu-iters 200 2>/dev/null \
+            | python3 -c "
+          import json, sys
+          arr = json.loads(sys.stdin.read())
+          assert arr, 'empty JSON array'
+          d = arr[0]
+          assert d['hard_violations'] == 0, f'infeasible: {d}'
+          print(f\"OK: {d['algorithm']} soft={d['soft_penalty']} rt={d['runtime']:.2f}s\")
+          "
+
+      - name: Smoke plot render
+        run: |
+          python -c "
+          import pandas as pd
+          from utils.plots import plot_feasibility_rates
+          df = pd.DataFrame({
+              'algorithm': ['Tabu Search', 'Greedy', 'Tabu Search', 'Greedy'],
+              'feasible':  [True, False, True, True],
+          })
+          fig = plot_feasibility_rates(df)
+          assert fig is not None
+          print('OK: plot renders')
+          "

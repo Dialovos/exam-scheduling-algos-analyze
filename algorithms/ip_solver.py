@@ -10,6 +10,7 @@ Aggressive domain pruning before variable creation.
 
 from core.models import ProblemInstance, Solution
 from core.evaluator import evaluate
+import os
 import time
 import collections
 
@@ -37,18 +38,29 @@ def solve_ip(
     time_limit: int = 300,
     verbose: bool = False,
     mip_gap: float = 0.01,
+    warm_start: Solution | None = None,
+    num_workers: int = 0,
 ) -> dict:
     """Solve exam timetabling via integer/constraint programming.
 
-    Automatically selects the best available backend:
-      1. OR-Tools CP-SAT  (preferred — faster build + solve)
-      2. PuLP / HiGHS or CBC  (fallback)
+    Args:
+        problem:      ITC 2007 ProblemInstance
+        time_limit:   wall-clock seconds for the underlying solver
+        verbose:      print build + solve progress
+        mip_gap:      relative MIP gap (PuLP backend only; CP-SAT uses OR-Tools defaults)
+        warm_start:   optional Solution fed to CP-SAT as a hint — often a 5-20× speedup
+        num_workers:  CP-SAT parallel workers; 0 = all available cores
+
+    Backend selection:
+      1. OR-Tools CP-SAT  (preferred — faster build + solve, accepts warm-start)
+      2. PuLP / HiGHS or CBC  (fallback — no warm-start support)
     """
     if problem.conflict_matrix is None:
         problem.build_derived_data()
 
     if HAS_CPSAT:
-        return _solve_cpsat(problem, time_limit, verbose)
+        return _solve_cpsat(problem, time_limit, verbose,
+                            warm_start=warm_start, num_workers=num_workers)
     elif HAS_PULP:
         return _solve_pulp(problem, time_limit, verbose, mip_gap)
     else:
@@ -63,7 +75,7 @@ def solve_ip(
 #  CP-SAT SOLVER  (primary)
 # ==============================================================
 
-def _solve_cpsat(problem, time_limit, verbose):
+def _solve_cpsat(problem, time_limit, verbose, warm_start=None, num_workers=0):
     start = time.time()
 
     n_e = problem.num_exams()
@@ -350,6 +362,27 @@ def _solve_cpsat(problem, time_limit, verbose):
     if obj_terms:
         model.minimize(sum(obj_terms))
 
+    # ── Warm start (CP-SAT hint) ─────────────────────────────
+    # When a feasible Solution is supplied, feed its (e,p,r) triples as hints.
+    # CP-SAT uses these as a starting point, often cutting solve time 5-20×.
+    if warm_start is not None:
+        hint_hits = 0
+        hint_misses = 0
+        for e, asg in warm_start.assignments.items():
+            if e >= n_e:
+                continue
+            # Solution.assignments[e] is a (period_id, room_id) tuple
+            p, r = asg[0], asg[1]
+            var = x.get((e, p, r))
+            if var is not None:
+                model.add_hint(var, 1)
+                hint_hits += 1
+            else:
+                hint_misses += 1
+        if verbose:
+            print(f"[CP-SAT] Warm-start: {hint_hits} hints seeded "
+                  f"({hint_misses} skipped as pruned)")
+
     build_time = time.time() - start
     if verbose:
         print(f"[CP-SAT] Model built in {build_time:.2f}s")
@@ -361,8 +394,11 @@ def _solve_cpsat(problem, time_limit, verbose):
     # ── Solve ────────────────────────────────────────────────
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = time_limit
-    solver.parameters.num_workers = 8
+    workers = num_workers if num_workers and num_workers > 0 else (os.cpu_count() or 8)
+    solver.parameters.num_workers = workers
     solver.parameters.log_search_progress = verbose
+    if verbose:
+        print(f"[CP-SAT] Using {workers} parallel workers")
 
     status = solver.solve(model)
     runtime = time.time() - start
