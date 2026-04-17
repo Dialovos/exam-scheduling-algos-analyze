@@ -32,4 +32,4 @@ and tests.
 ## How to run
 - Build: `make` (requires C++20).
 - Single run: `python main.py --dataset instances/exam_comp_set1.exam --algo tabu`.
-- Full batch (Colab): open `notebooks/colab_runner.ipynb`.
+- Full batch (Colab): open `colab_runner.ipynb`.
