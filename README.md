@@ -306,6 +306,7 @@ exam-scheduling/
 │   ├── tuned_params.json
 │   ├── regen_figures.py      # rebuild every figure from a saved batch
 │   ├── tuning_export.py      # sensitivity grid export
+│   ├── param_sweep.py        # 1-D sensitivity sweep (drives Colab sweep cell)
 │   └── tuner/                # auto-tuner split into a package
 │       ├── core.py, cli.py, eval.py
 │       ├── sampling.py, search_spaces.py
