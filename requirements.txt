@@ -8,3 +8,5 @@ ipykernel>=6.25
 pandas>=2.0
 plotly>=5.18
 kaleido>=0.2,<1.0
+pytest>=7.4
+pytest-timeout>=2.2
