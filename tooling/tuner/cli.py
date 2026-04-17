@@ -46,6 +46,18 @@ Examples:
                     help='Chain population (default: 8)')
     ap.add_argument('--chain-rounds', type=int, default=3,
                     help='Chain tournament rounds (default: 3)')
+    ap.add_argument('--chain-max-len', type=int, default=10,
+                    help='Max chain length (default: 10)')
+    ap.add_argument('--chain-crossover-rate', type=float, default=0.25,
+                    help='Crossover probability during chain variation (default: 0.25)')
+    ap.add_argument('--chain-allow-duplicates', action='store_true',
+                    help='Allow adjacent-duplicate algos in chains (default: off)')
+    ap.add_argument('--no-chain-prefix-cache', action='store_true',
+                    help='Disable on-disk prefix .sln cache (default: on)')
+    ap.add_argument('--no-chain-partial-credit', action='store_true',
+                    help='Disable partial-credit scoring for truncated chains')
+    ap.add_argument('--no-chain-early-stop', action='store_true',
+                    help='Disable per-step early-stop on hopeless partials')
     ap.add_argument('--seed', type=int, default=42, help='Random seed (default: 42)')
     ap.add_argument('--eval-datasets', type=int, default=3,
                     help='Datasets to evaluate per trial in global mode (default: 3)')
@@ -101,6 +113,12 @@ Examples:
         param_trials=args.param_trials,
         chain_pop=args.chain_pop,
         chain_rounds=args.chain_rounds,
+        chain_max_len=args.chain_max_len,
+        chain_crossover_rate=args.chain_crossover_rate,
+        chain_allow_duplicates=args.chain_allow_duplicates,
+        chain_prefix_cache=not args.no_chain_prefix_cache,
+        chain_partial_credit=not args.no_chain_partial_credit,
+        chain_early_stop=not args.no_chain_early_stop,
         seed=args.seed,
         ip_time_limit=args.ip_time_limit,
         max_time=max_time_sec,

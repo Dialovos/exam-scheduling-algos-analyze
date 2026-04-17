@@ -16,7 +16,7 @@ Lower scores are better. Ties broken by stable sort (first candidate wins).
 from concurrent.futures import ThreadPoolExecutor
 
 
-def successive_halving(candidates, eval_fn, rungs, eta=2):
+def successive_halving(candidates, eval_fn, rungs, eta=2, eta_schedule=None):
     """Run successive halving.
 
     Args:
@@ -25,6 +25,12 @@ def successive_halving(candidates, eval_fn, rungs, eta=2):
         rungs: list of fidelity tuples, innermost first. Length = number
                of rungs. Rung k uses fidelity rungs[k].
         eta: reduction factor per rung (default 2, i.e. halving).
+        eta_schedule: optional per-rung reduction factor list. When provided,
+               rung ``k`` keeps top ``len(scored) // eta_schedule[k]``. Must be
+               ``len(rungs) - 1`` long (no promotion after final rung — the
+               final entry is unused and may be omitted). Falls back to *eta*
+               when None. Lets large populations prune aggressively at rung 0
+               (e.g., eta=4) while small ones stay conservative (eta=2).
 
     Returns:
         (winner_candidate, winner_score, history)
@@ -59,9 +65,10 @@ def successive_halving(candidates, eval_fn, rungs, eta=2):
         if rung_idx == len(rungs) - 1:
             break  # no promotion after final rung
 
-        # Promote top 1/eta
+        # Promote top 1/eta (per-rung override via eta_schedule)
         rung_scores.sort(key=lambda p: p[1])
-        n_promote = max(1, len(rung_scores) // eta)
+        rung_eta = eta_schedule[rung_idx] if eta_schedule and rung_idx < len(eta_schedule) else eta
+        n_promote = max(1, len(rung_scores) // rung_eta)
         survivors = [c for c, _ in rung_scores[:n_promote]]
 
     # Winner = candidate with lowest best score across all its rungs

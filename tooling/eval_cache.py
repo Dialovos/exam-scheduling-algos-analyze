@@ -33,6 +33,19 @@ def _hash_chain(chain_steps) -> str:
     return hashlib.sha1(blob.encode()).hexdigest()[:16]
 
 
+def _hash_chain_seq(chain_steps) -> str:
+    """Return a stable sha1 hex digest of just the algo sequence (no params).
+
+    Used by :func:`EvalCache.chainseq_key` to answer "has this algo
+    sequence ever been evaluated?" regardless of what params each step ran
+    with — lets the tuner pre-seed population scores for crossover children
+    whose sequence matches a previously scored chain.
+    """
+    algos = [a for a, _ in chain_steps]
+    blob = json.dumps(algos, default=str)
+    return hashlib.sha1(blob.encode()).hexdigest()[:16]
+
+
 class EvalCache:
     def __init__(self, persist_path: str | None = None):
         self.persist_path = persist_path
@@ -55,6 +68,18 @@ class EvalCache:
     def chain_key(dataset: str, seed: int, chain_steps) -> str:
         ds = Path(dataset).name
         return f"chain|{ds}|{seed}|{_hash_chain(chain_steps)}"
+
+    @staticmethod
+    def chainseq_key(dataset: str, seed: int, chain_steps) -> str:
+        """Sequence-only key — ignores per-step params.
+
+        Distinct from :meth:`chain_key` (params-aware) so we can answer two
+        different questions without hashing collisions:
+          * chain_key      — "exact same run?"
+          * chainseq_key   — "same algo pipeline, any params?"
+        """
+        ds = Path(dataset).name
+        return f"chainseq|{ds}|{seed}|{_hash_chain_seq(chain_steps)}"
 
     def get(self, key: str) -> dict | None:
         hit = self._store.get(key)
