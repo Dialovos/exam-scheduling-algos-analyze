@@ -45,6 +45,23 @@ def _print_comparison(results):
               f"{hard:>7} {soft:>9}")
 
 
+def _save_summary(results, output_dir):
+    """Per-algo runtime + feasibility + totals — one-shot machine-readable summary."""
+    summary = {}
+    for name, r in results.items():
+        ev = r['evaluation']
+        summary[name] = {
+            'runtime': float(r.get('runtime', 0.0)),
+            'feasible': bool(getattr(ev, 'hard_violations', 1) == 0),
+            'hard': int(getattr(ev, 'hard_violations', 0)),
+            'soft': int(getattr(ev, 'soft_penalty', 0)),
+        }
+    os.makedirs(output_dir, exist_ok=True)
+    with open(os.path.join(output_dir, "summary.json"), 'w') as f:
+        json.dump(summary, f, indent=2)
+    return summary
+
+
 def _save_soft_breakdown(results, output_dir):
     breakdown = {}
     for name, r in results.items():
@@ -109,6 +126,7 @@ def run_demo(size=50, algo=None, verbose=True, output_dir='results', **kwargs):
 
     _print_comparison(results)
     bd = _save_soft_breakdown(results, output_dir)
+    _save_summary(results, output_dir)
     print(f"\n{'='*72}\n  SOFT CONSTRAINT BREAKDOWN\n{'='*72}")
     for name, b in bd.items():
         total = sum(b.values())
@@ -156,6 +174,7 @@ def run_on_dataset(filepath, limit=0, algo=None, verbose=True, output_dir='resul
 
     _print_comparison(results)
     _save_soft_breakdown(results, output_dir)
+    _save_summary(results, output_dir)
 
     sln_dir = os.path.join(output_dir, "solutions")
     os.makedirs(sln_dir, exist_ok=True)
@@ -227,6 +246,7 @@ Examples:
     ap.add_argument('--no-batch', action='store_true',
                     help='Disable batching, write directly to results/.')
     ap.add_argument('--tabu-iters', type=int, default=_gp.get('tabu_iters', 2000))
+    ap.add_argument('--tabu-tenure', type=int, default=_gp.get('tabu_tenure', 20))
     ap.add_argument('--tabu-patience', type=int, default=_gp.get('tabu_patience', 500))
     ap.add_argument('--sa-iters', type=int, default=_gp.get('sa_iters', 5000))
     ap.add_argument('--kempe-iters', type=int, default=_gp.get('kempe_iters', 3000))
@@ -326,7 +346,8 @@ Examples:
             except Exception as e:
                 print(f"Warning: failed to load warm-start {args.ip_warmstart}: {e}")
 
-    kw = dict(tabu_iters=args.tabu_iters, tabu_patience=args.tabu_patience,
+    kw = dict(tabu_iters=args.tabu_iters, tabu_tenure=args.tabu_tenure,
+              tabu_patience=args.tabu_patience,
               sa_iters=args.sa_iters, kempe_iters=args.kempe_iters,
               alns_iters=args.alns_iters, gd_iters=args.gd_iters,
               abc_pop=args.abc_pop, abc_iters=args.abc_iters,
