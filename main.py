@@ -293,6 +293,10 @@ Examples:
                     help='Chain population size (default: 12)')
     ap.add_argument('--chain-rounds', type=int, default=5,
                     help='Chain tournament rounds (default: 5)')
+    ap.add_argument('--max-time', type=int, default=None,
+                    help='Tuner total wall-clock budget in seconds (default: 1200 multi / 480 single)')
+    ap.add_argument('--eval-datasets', type=int, default=3,
+                    help='Number of datasets used for tuner evaluation (default: 3)')
     ap.add_argument('--resume', action='store_true',
                     help='Resume auto-tuner from checkpoint')
 
@@ -395,6 +399,8 @@ Examples:
             param_trials=args.param_trials,
             chain_pop=args.chain_pop,
             chain_rounds=args.chain_rounds,
+            max_time=args.max_time,
+            eval_datasets=args.eval_datasets,
             seed=args.seed,
             auto_update=not args.no_auto_update,
             force_update=args.force_update,
