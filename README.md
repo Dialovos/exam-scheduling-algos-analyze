@@ -24,6 +24,8 @@
 - [Results](#results)
 - [Auto-Tuner](#auto-tuner)
 - [Usage](#usage)
+- [Research Questions](#research-questions)
+- [Reproducing the paper](#reproducing-the-paper)
 - [GenAI Usage Disclosure](#genai-usage-disclosure)
 - [References](#references)
 
@@ -35,7 +37,7 @@ The problem this project tackles is the Capacitated Examination Timetabling Prob
 
 The problem is NP-hard. It follows the graph-coloring formulation: exams are vertices, edges connect any pair sharing at least one student. No polynomial-time algorithm is known, which means exponential worst-case behavior without a heuristic approach.
 
-Twelve algorithms are implemented in a single C++20 solver, with a Python bridge that falls back gracefully when the binary isn't built. An auto-tuner hunts for better defaults across datasets, and a plotting module generates figures for analysis. Everything runs against the [ITC 2007 Examination Track](https://www.eeecs.qub.ac.uk/itc2007/examtrack/) benchmark and a synthetic instance generator.
+Thirteen algorithms are implemented in a single C++20 solver, with a Python bridge that falls back gracefully when the binary isn't built. An auto-tuner hunts for better defaults across datasets, and a plotting module generates figures for analysis. Everything runs against the [ITC 2007 Examination Track](https://www.eeecs.qub.ac.uk/itc2007/examtrack/) benchmark and a synthetic instance generator.
 
 ## Quick start
 
@@ -66,6 +68,7 @@ That runs every algorithm on set4 (273 exams — small and fast) and drops outpu
 | 10 | WOA | Swarm | Whale Optimization with spiral + encircling |
 | 11 | CP-SAT | Exact | Constraint programming via OR-Tools CP-SAT |
 | 12 | GVNS | Hybrid | General Variable Neighbourhood Search with SA acceptance |
+| 13 | HHO+ | Swarm (hybrid) | Harris-Hawks escape + Levy flight with local-search refinement |
 
 All algorithms run through one C++ binary. Python fallbacks exist for algorithms 1-8 when the binary is unavailable.
 
@@ -110,6 +113,9 @@ All sourced from the [ITC 2007 Examination Track](https://www.eeecs.qub.ac.uk/it
 <br/>
 
 GVNS and Kempe hold up across the board. The tightly-constrained sets (set3, set5, set7) punish anything that can't reason carefully about room capacity — GD and ALNS struggle there while the others stay relatively stable.
+
+> [!TIP]
+> Cluttered plots (Pareto, line-across-datasets, runtime scaling, convergence) also have a `by_family=True` variant that splits the 13 algorithms into a 2×2 grid by search paradigm — Construction / Trajectory / Population / Exact-Hybrid. Those faceted files land in `graphs/*_by_family.png` when you run `make reproduce`.
 
 <br/>
 
@@ -233,7 +239,7 @@ python3 main.py --show-params
 | Flag | Description |
 |------|-------------|
 | `--dataset FILE` | ITC 2007 `.exam` file |
-| `--algo NAME` | `greedy`, `tabu`, `kempe`, `sa`, `alns`, `gd`, `abc`, `ga`, `lahc`, `woa`, `cpsat`, `vns` |
+| `--algo NAME` | `greedy`, `tabu`, `kempe`, `sa`, `alns`, `gd`, `abc`, `ga`, `lahc`, `woa`, `hho`, `cpsat`, `vns` |
 | `--mode MODE` | `demo` (default), `plot`, `batches`, `tune` |
 | `--size N` | Exam count for synthetic demo mode |
 | `--seed N` | Random seed (default: 42) |
@@ -246,6 +252,7 @@ python3 main.py --show-params
 | `--ga-pop` / `--ga-iters` | GA population / generations |
 | `--lahc-iters` / `--lahc-list` | LAHC iterations / history list length (0 = auto) |
 | `--woa-pop` / `--woa-iters` | WOA population / iterations |
+| `--hho-pop` / `--hho-iters` | HHO+ hawk population / iterations |
 | `--cpsat-time` | CP-SAT time limit in seconds |
 | `--vns-iters` / `--vns-budget` | GVNS iterations / scan budget per LS call (0 = auto) |
 | `--show-params` | Print active param defaults and exit |
@@ -273,7 +280,7 @@ exam-scheduling/
 │   └── evaluator.py
 │
 ├── algorithms/
-│   ├── cpp_bridge.py
+│   ├── cpp_bridge.py        # subprocess bridge to the C++ binary
 │   ├── ip_solver.py
 │   ├── greedy.py
 │   ├── tabu_search.py
@@ -282,27 +289,41 @@ exam-scheduling/
 │   ├── alns.py
 │   ├── great_deluge.py
 │   ├── abc.py
-│   └── ga.py
+│   └── ga.py                # Python fallbacks; LAHC/WOA/HHO+/CP-SAT/GVNS are C++-only
 │
 ├── cpp/
 │   └── src/
 │       ├── main.cpp
-│       ├── models.h, parser.h, evaluator.h, greedy.h
-│       ├── neighbourhoods.h
+│       ├── models.h, parser.h, evaluator.h
+│       ├── seeder.h, repair.h, neighbourhoods.h, greedy.h
 │       ├── tabu.h, kempe.h, sa.h, alns.h, gd.h
-│       ├── abc.h, ga.h, lahc.h, woa.h
-│       ├── cpsat.h, vns.h, feasibility.h
-│       └── archive/
+│       ├── abc.h, ga.h, lahc.h, woa.h, hho.h
+│       └── cpsat.h, vns.h
 │
 ├── tooling/
-│   ├── auto_tuner.py
-│   ├── tuned_params.py
-│   └── tuned_params.json
+│   ├── tuned_params.py       # single source of truth for defaults
+│   ├── tuned_params.json
+│   ├── regen_figures.py      # rebuild every figure from a saved batch
+│   ├── tuning_export.py      # sensitivity grid export
+│   └── tuner/                # auto-tuner split into a package
+│       ├── core.py, cli.py, eval.py
+│       ├── sampling.py, search_spaces.py
+│       ├── binary.py, synthetic.py, checkpoint.py
 │
 ├── utils/
 │   ├── batch_manager.py
 │   ├── results_logger.py
-│   └── plotting.py
+│   ├── plotting.py           # thin shim re-exporting from plots/
+│   └── plots/                # figure generators (split by topic)
+│       ├── shared.py         # ALGO_FAMILY taxonomy, style helpers
+│       ├── comparative.py    # bars, boxes, radar, heatmap, Pareto
+│       ├── convergence.py    # line/scatter/scaling (with by_family facets)
+│       ├── breakdown.py      # soft-constraint stacks
+│       └── tuning.py         # sensitivity + trial trajectories
+│
+├── notebooks/
+│   ├── colab_runner.ipynb    # full batch on a Colab VM
+│   └── COLAB_RUNBOOK.md      # step-by-step "don't mess up your laptop" guide
 │
 ├── instances/
 ├── results/
@@ -314,9 +335,33 @@ exam-scheduling/
 
 </details>
 
+## Research questions
+
+1. How does each algorithm's runtime scale with input size across synthetic
+   instances from 50 to 1200 exams?
+2. Where does each algorithm sit on the quality-vs-runtime Pareto frontier
+   when all 13 run on the same dataset?
+3. How sensitive is each tunable algorithm to its parameters? A 2-D
+   grid sweep + 1-D degrade plot answers this per-knob.
+4. How does the exact CP-SAT solver's memory and reliability degrade as
+   input size grows?
+
+## Reproducing the paper
+
+- Local smoke: `make reproduce` — builds the solver, runs a Tabu smoke
+  on set1, and regenerates `graphs/` from the cached batch.
+- Full benchmark (Colab recommended): follow
+  [`notebooks/COLAB_RUNBOOK.md`](notebooks/COLAB_RUNBOOK.md) — it walks
+  through [`notebooks/colab_runner.ipynb`](notebooks/colab_runner.ipynb)
+  end-to-end, including the post-run step that unzips the batch locally
+  and replays `make reproduce` to regenerate figures.
+- CI: every push runs `.github/workflows/reproduce.yml` — compiles the
+  binary, runs the pytest suite, smoke-tests Tabu on set1, and exercises
+  the plotting module.
+
 ## GenAI usage disclosure
 
-AI-assisted coding was used throughout development for algorithm implementation, debugging, and code refactoring. Experimental design, benchmarking, parameter choices, and writing were done by non-AI enity.
+AI-assisted coding was used throughout development for algorithm implementation, debugging, and code refactoring. Experimental design, benchmarking, parameter choices, and writing were done by a non-AI entity.
 
 ## References
 

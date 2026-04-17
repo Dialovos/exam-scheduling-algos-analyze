@@ -42,6 +42,8 @@ def run_solver(
     lahc_list: int = _GP.get('lahc_list', 0),
     woa_pop: int = _GP.get('woa_pop', 25),
     woa_iters: int = _GP.get('woa_iters', 3000),
+    hho_pop: int = _GP.get('hho_pop', 20),
+    hho_iters: int = _GP.get('hho_iters', 500),
     cpsat_time: float = _GP.get('cpsat_time', 60.0),
     vns_iters: int = _GP.get('vns_iters', 5000),
     vns_budget: int = _GP.get('vns_budget', 0),
@@ -94,7 +96,8 @@ def run_solver(
         abc_iters=abc_iters, ga_pop=ga_pop,
         ga_iters=ga_iters, lahc_iters=lahc_iters,
         lahc_list=lahc_list, woa_pop=woa_pop,
-        woa_iters=woa_iters, cpsat_time=cpsat_time,
+        woa_iters=woa_iters, hho_pop=hho_pop, hho_iters=hho_iters,
+        cpsat_time=cpsat_time,
         vns_iters=vns_iters, vns_budget=vns_budget,
         seed=seed, output_dir=output_dir, verbose=verbose,
     )
@@ -287,10 +290,10 @@ def _run_python_fallback(problem, algo='all',
         r['evaluation'] = _py_to_eval(r['evaluation'])
         results['Genetic Algorithm'] = r
 
-    cpp_only = {'lahc', 'woa', 'cpsat', 'vns'}
+    cpp_only = {'lahc', 'woa', 'hho', 'cpsat', 'vns'}
     if algo in cpp_only or (algo == 'all' and verbose):
         if verbose:
-            print(f"\n{'─'*50}\nNote: LAHC, WOA, CP-SAT, GVNS are C++ only (skipped in fallback)")
+            print(f"\n{'─'*50}\nNote: LAHC, WOA, HHO+, CP-SAT, GVNS are C++ only (skipped in fallback)")
 
     return results
 
@@ -321,6 +324,8 @@ def run_cpp_solver(
     lahc_list: int = _GP.get('lahc_list', 0),
     woa_pop: int = _GP.get('woa_pop', 25),
     woa_iters: int = _GP.get('woa_iters', 3000),
+    hho_pop: int = _GP.get('hho_pop', 20),
+    hho_iters: int = _GP.get('hho_iters', 500),
     cpsat_time: float = _GP.get('cpsat_time', 60.0),
     vns_iters: int = _GP.get('vns_iters', 5000),
     vns_budget: int = _GP.get('vns_budget', 0),
@@ -370,6 +375,8 @@ def run_cpp_solver(
         '--lahc-list', str(lahc_list),
         '--woa-pop', str(woa_pop),
         '--woa-iters', str(woa_iters),
+        '--hho-pop', str(hho_pop),
+        '--hho-iters', str(hho_iters),
         '--cpsat-time', str(cpsat_time),
         '--vns-iters', str(vns_iters),
         '--vns-budget', str(vns_budget),

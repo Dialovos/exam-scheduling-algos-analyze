@@ -33,6 +33,7 @@ FALLBACK_PARAMS = {
     'ga':    {'ga_pop': 50,   'ga_iters': 500},
     'lahc':  {'lahc_iters': 5000, 'lahc_list': 0},
     'woa':   {'woa_pop': 25,  'woa_iters': 3000},
+    'hho':   {'hho_pop': 20,  'hho_iters': 500},
     'cpsat': {'cpsat_time': 60.0},
     'vns':   {'vns_iters': 5000, 'vns_budget': 0},
 }

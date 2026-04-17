@@ -17,7 +17,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from core.models import ProblemInstance, Solution
 from core.generator import generate_synthetic, write_itc2007_format
-from core.parser import parse_itc2007_exam, write_solution_itc2007
+from core.parser import parse_itc2007_exam, write_solution_itc2007, read_solution_itc2007
 from algorithms.cpp_bridge import run_cpp_solver
 from utils.plotting import plot_soft_constraint_breakdown
 from utils.batch_manager import BatchManager
@@ -70,6 +70,12 @@ def run_demo(size=50, algo=None, verbose=True, output_dir='results', **kwargs):
     print(f"  DEMO: {size}-exam synthetic instance")
     print(f"{'='*72}\n")
 
+    # Extract IP-only kwargs so they don't forward into run_cpp_solver
+    ip_time = kwargs.pop('ip_time', 60)
+    ip_workers = kwargs.pop('ip_workers', 0)
+    ip_warm_solution = kwargs.pop('ip_warm_solution', None)
+    kwargs.pop('ip_max_exams', None)  # demo uses a fixed 150-exam cap
+
     problem = generate_synthetic(
         num_exams=size, student_ratio=7.0, conflict_density=0.15,
         num_rooms=max(3, size // 20), room_capacity=max(50, int(size * 0.4)),
@@ -93,11 +99,12 @@ def run_demo(size=50, algo=None, verbose=True, output_dir='results', **kwargs):
         if cpp_results:
             results.update(cpp_results)
 
-    # IP solver (Python)
+    # IP solver (Python) — demo keeps a tight 150-exam cap so it stays snappy
     if (algo is None or algo == 'ip') and HAS_IP and problem.num_exams() <= 150:
         if verbose:
-            print(f"\n{'─'*50}\nInteger Programming (Python/PuLP, limit=60s)...")
-        r = solve_ip(problem, time_limit=60, verbose=verbose)
+            print(f"\n{'─'*50}\nInteger Programming (CP-SAT, limit={ip_time}s)...")
+        r = solve_ip(problem, time_limit=ip_time, verbose=verbose,
+                     warm_start=ip_warm_solution, num_workers=ip_workers)
         results['IP'] = r
 
     _print_comparison(results)
@@ -109,7 +116,9 @@ def run_demo(size=50, algo=None, verbose=True, output_dir='results', **kwargs):
         print(f"{name:<25} total={total:>6}  [{', '.join(parts)}]")
 
 
-def run_on_dataset(filepath, limit=0, algo=None, verbose=True, output_dir='results', **kwargs):
+def run_on_dataset(filepath, limit=0, algo=None, verbose=True, output_dir='results',
+                   ip_time=120, ip_max_exams=900, ip_warm_solution=None,
+                   ip_workers=0, **kwargs):
     limit_str = f" (limit={limit} exams)" if limit > 0 else " (full dataset)"
     algo_str = f" [{algo.upper()}]" if algo else ""
     print(f"\n{'='*72}")
@@ -134,13 +143,16 @@ def run_on_dataset(filepath, limit=0, algo=None, verbose=True, output_dir='resul
     # IP solver (Python)
     if (algo is None or algo == 'ip') and HAS_IP:
         ne = problem.num_exams()
-        if ne <= 500:
+        if ne <= ip_max_exams:
             if verbose:
-                print(f"\n{'─'*50}\nInteger Programming (CP-SAT/HiGHS, limit=120s)...")
-            r = solve_ip(problem, time_limit=120, verbose=verbose)
+                hint_note = " + warm-start" if ip_warm_solution is not None else ""
+                print(f"\n{'─'*50}\nInteger Programming "
+                      f"(CP-SAT, limit={ip_time}s{hint_note})...")
+            r = solve_ip(problem, time_limit=ip_time, verbose=verbose,
+                         warm_start=ip_warm_solution, num_workers=ip_workers)
             results['IP'] = r
         elif verbose:
-            print(f"\n[IP] Skipped (n={ne} > 500)")
+            print(f"\n[IP] Skipped (n={ne} > {ip_max_exams})")
 
     _print_comparison(results)
     _save_soft_breakdown(results, output_dir)
@@ -201,7 +213,7 @@ Examples:
     _gp = load_params_flat()
 
     ap.add_argument('--mode', choices=['demo', 'plot', 'batches', 'tune'], default='demo')
-    ap.add_argument('--algo', choices=['greedy', 'ip', 'tabu', 'kempe', 'sa', 'alns', 'gd', 'abc', 'ga', 'lahc', 'woa', 'cpsat', 'vns'])
+    ap.add_argument('--algo', choices=['greedy', 'ip', 'tabu', 'kempe', 'sa', 'alns', 'gd', 'abc', 'ga', 'lahc', 'woa', 'hho', 'cpsat', 'vns'])
     ap.add_argument('--size', type=int, default=50)
     ap.add_argument('--dataset', type=str)
     ap.add_argument('--limit', type=int, default=0)
@@ -228,9 +240,19 @@ Examples:
     ap.add_argument('--lahc-list', type=int, default=_gp.get('lahc_list', 0))
     ap.add_argument('--woa-pop', type=int, default=_gp.get('woa_pop', 25))
     ap.add_argument('--woa-iters', type=int, default=_gp.get('woa_iters', 3000))
+    ap.add_argument('--hho-pop', type=int, default=_gp.get('hho_pop', 20))
+    ap.add_argument('--hho-iters', type=int, default=_gp.get('hho_iters', 500))
     ap.add_argument('--cpsat-time', type=float, default=_gp.get('cpsat_time', 60.0))
     ap.add_argument('--vns-iters', type=int, default=_gp.get('vns_iters', 5000))
     ap.add_argument('--vns-budget', type=int, default=_gp.get('vns_budget', 0))
+    ap.add_argument('--ip-time', type=int, default=120,
+                    help='IP (Python CP-SAT) time limit in seconds (default: 120)')
+    ap.add_argument('--ip-max-exams', type=int, default=900,
+                    help='Skip IP when instance has more exams than this (default: 900)')
+    ap.add_argument('--ip-workers', type=int, default=0,
+                    help='IP CP-SAT parallel workers; 0 = all cores (default: 0)')
+    ap.add_argument('--ip-warmstart', type=str, default=None,
+                    help='Path to ITC-format .sln to use as IP warm-start hint')
 
     # Param management
     ap.add_argument('--show-params', action='store_true',
@@ -288,6 +310,22 @@ Examples:
         return
 
     verbose = not args.quiet
+
+    # Optional warm-start solution for IP (parsed once, reused per run)
+    ip_warm_solution = None
+    if args.ip_warmstart:
+        if not args.dataset:
+            print("Warning: --ip-warmstart requires --dataset; ignoring.")
+        else:
+            try:
+                problem_for_hint = parse_itc2007_exam(args.dataset, limit=args.limit)
+                ip_warm_solution = read_solution_itc2007(
+                    args.ip_warmstart, problem_for_hint)
+                if verbose:
+                    print(f"[IP] Loaded warm-start: {args.ip_warmstart}")
+            except Exception as e:
+                print(f"Warning: failed to load warm-start {args.ip_warmstart}: {e}")
+
     kw = dict(tabu_iters=args.tabu_iters, tabu_patience=args.tabu_patience,
               sa_iters=args.sa_iters, kempe_iters=args.kempe_iters,
               alns_iters=args.alns_iters, gd_iters=args.gd_iters,
@@ -295,8 +333,11 @@ Examples:
               ga_pop=args.ga_pop, ga_iters=args.ga_iters,
               lahc_iters=args.lahc_iters, lahc_list=args.lahc_list,
               woa_pop=args.woa_pop, woa_iters=args.woa_iters,
+              hho_pop=args.hho_pop, hho_iters=args.hho_iters,
               cpsat_time=args.cpsat_time,
               vns_iters=args.vns_iters, vns_budget=args.vns_budget,
+              ip_time=args.ip_time, ip_max_exams=args.ip_max_exams,
+              ip_workers=args.ip_workers, ip_warm_solution=ip_warm_solution,
               seed=args.seed)
 
     # Resolve output directory via batch manager

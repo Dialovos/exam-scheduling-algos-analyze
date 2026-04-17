@@ -21,7 +21,8 @@
 #include "woa.h"
 #include "cpsat.h"
 #include "vns.h"
-#include "feasibility.h"
+#include "seeder.h"
+#include "hho.h"
 
 #include <filesystem>
 #include <fstream>
@@ -56,8 +57,13 @@ static void write_result_json(ostream& out, const AlgoResult& r) {
         << "    \"non_mixed_durations\": " << ev.non_mixed_durations << ",\n"
         << "    \"front_load\": " << ev.front_load << ",\n"
         << "    \"period_penalty\": " << ev.period_penalty << ",\n"
-        << "    \"room_penalty\": " << ev.room_penalty << "\n"
-        << "  }";
+        << "    \"room_penalty\": " << ev.room_penalty;
+    // Seeder carries its escalation layer (1-4) in the iterations slot; expose
+    // it as a first-class field so reports can track how often we fall off the
+    // easy layers. Everyone else stays quiet to keep the JSON shape stable.
+    if (r.algorithm == "Seeder")
+        out << ",\n    \"seeder_layer\": " << r.iterations;
+    out << "\n  }";
 }
 
 static void write_solution_file(const Solution& sol, const string& filepath) {
@@ -79,7 +85,8 @@ int main(int argc, char* argv[]) {
     int tabu_iters      = 200;
     int tabu_tenure     = 15;
     int tabu_patience   = 50;
-    // HHO archived — replaced by WOA (pending)
+    int hho_pop         = 20;
+    int hho_iters       = 500;
     int sa_iters        = 5000;
     int kempe_iters     = 3000;
     int alns_iters      = 2000;
@@ -107,7 +114,8 @@ int main(int argc, char* argv[]) {
         else if (arg == "--tabu-iters"     && i+1 < argc) tabu_iters    = stoi(argv[++i]);
         else if (arg == "--tabu-tenure"    && i+1 < argc) tabu_tenure   = stoi(argv[++i]);
         else if (arg == "--tabu-patience"  && i+1 < argc) tabu_patience = stoi(argv[++i]);
-        // HHO args removed (archived)
+        else if (arg == "--hho-pop"        && i+1 < argc) hho_pop       = stoi(argv[++i]);
+        else if (arg == "--hho-iters"      && i+1 < argc) hho_iters     = stoi(argv[++i]);
         else if (arg == "--sa-iters"       && i+1 < argc) sa_iters      = stoi(argv[++i]);
         else if (arg == "--kempe-iters"    && i+1 < argc) kempe_iters   = stoi(argv[++i]);
         else if (arg == "--alns-iters"     && i+1 < argc) alns_iters    = stoi(argv[++i]);
@@ -133,12 +141,13 @@ int main(int argc, char* argv[]) {
     if (filepath.empty()) {
         cerr << "Usage: exam_solver <file.exam> [options]\n"
              << "\nOptions:\n"
-             << "  --algo ALGO[,ALGO,...]       Algorithm(s): greedy,feasibility,tabu,kempe,sa,alns,gd,abc,ga,lahc,woa,cpsat,vns,all (default: all)\n"
+             << "  --algo ALGO[,ALGO,...]       Algorithm(s): greedy,seeder,tabu,kempe,sa,alns,gd,abc,ga,lahc,woa,hho,cpsat,vns,all (default: all)\n"
              << "  --limit N                    Load only first N exams (0=all)\n"
              << "  --tabu-iters N               Tabu max iterations (default: 200)\n"
              << "  --tabu-tenure N              Tabu tenure (default: 15)\n"
              << "  --tabu-patience N            Tabu patience (default: 50)\n"
-             // HHO help removed
+             << "  --hho-pop N                  HHO+ population size (default: 20)\n"
+             << "  --hho-iters N                HHO+ iterations (default: 500)\n"
              << "  --sa-iters N                 SA iterations (default: 5000)\n"
              << "  --kempe-iters N              Kempe Chain iterations (default: 3000)\n"
              << "  --alns-iters N               ALNS iterations (default: 2000)\n"
@@ -212,45 +221,44 @@ int main(int argc, char* argv[]) {
     string sln_dir = output_dir + "/solutions";
     filesystem::create_directories(sln_dir);
 
-    // When running multiple algos, compute greedy once and share as init solution
-    // instead of each algorithm rebuilding it independently.
-    const Solution* shared_init = init_sol_ptr;
-    AlgoResult greedy_result;
-    if (algos.size() > 1 || run_all || want("greedy")) {
-        greedy_result = solve_greedy(prob, verbose);
+    // ── Greedy runs only when explicitly requested (for the paper's
+    //    "bare DSatur" baseline). It no longer feeds shared_init — that is
+    //    the Seeder's job now.
+    if (want("greedy")) {
+        auto greedy_result = solve_greedy(prob, verbose);
         write_solution_file(greedy_result.sol, sln_dir + "/solution_greedy_" + ne_str + ".sln");
-        if (want("greedy"))
-            results.push_back(greedy_result);
-        if (!init_sol_ptr)
-            shared_init = &greedy_result.sol;
-    }
-    // ── Feasibility pre-processor: when greedy is infeasible, run targeted
-    //    feasibility solver and use its output as shared_init for all algorithms.
-    AlgoResult feasibility_result;
-    if (shared_init && !shared_init->period_of.empty()) {
-        FastEvaluator fe_check(prob);
-        int greedy_hard = fe_check.count_hard_fast(*shared_init);
-        if (greedy_hard > 0) {
-            if (verbose)
-                cerr << "Greedy infeasible (hard=" << greedy_hard
-                     << "), running feasibility solver...\n";
-            feasibility_result = solve_feasibility(prob, seed, verbose, shared_init);
-            write_solution_file(feasibility_result.sol,
-                                sln_dir + "/solution_feasibility_" + ne_str + ".sln");
-            if (want("feasibility"))
-                results.push_back(feasibility_result);
-            // Use feasibility output as shared init for all subsequent algorithms
-            if (feasibility_result.eval.hard() < greedy_hard)
-                shared_init = &feasibility_result.sol;
-        }
+        results.push_back(move(greedy_result));
     }
 
+    // ── Seeder: the universal 4-layer starting-point generator. Computed
+    //    once per run, fed to every iterative algo as shared_init. Layer 4
+    //    does the bounded Kempe repair if earlier layers leave violations.
+    //
+    //    When the user requests `seeder` explicitly, its result also shows
+    //    up in the JSON output (so reports can track layer-usage per instance).
+    const Solution* shared_init = init_sol_ptr;
+    AlgoResult seeder_result;
+    bool iterative_needed =
+        run_all || want("tabu") || want("kempe") || want("sa") || want("alns") ||
+        want("gd") || want("abc") || want("ga") || want("lahc") || want("woa") ||
+        want("cpsat") || want("vns") || want("hho") || want("seeder");
+    if (iterative_needed && !init_sol_ptr) {
+        seeder_result = solve_seeder(prob, seed, verbose);
+        write_solution_file(seeder_result.sol, sln_dir + "/solution_seeder_" + ne_str + ".sln");
+        shared_init = &seeder_result.sol;
+        if (want("seeder"))
+            results.push_back(seeder_result);
+    }
     if (want("tabu")) {
         auto r = solve_tabu(prob, tabu_iters, tabu_tenure, tabu_patience, seed, verbose, shared_init);
         write_solution_file(r.sol, sln_dir + "/solution_tabu_search_" + ne_str + ".sln");
         results.push_back(move(r));
     }
-    // HHO block removed (archived to cpp/src/archive/hho.h)
+    if (want("hho")) {
+        auto r = solve_hho(prob, hho_pop, hho_iters, seed, verbose, shared_init);
+        write_solution_file(r.sol, sln_dir + "/solution_hho_" + ne_str + ".sln");
+        results.push_back(move(r));
+    }
     if (want("kempe")) {
         auto r = solve_kempe(prob, kempe_iters, seed, verbose, shared_init);
         write_solution_file(r.sol, sln_dir + "/solution_kempe_chain_" + ne_str + ".sln");
