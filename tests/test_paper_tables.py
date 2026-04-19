@@ -110,10 +110,21 @@ def test_t4_groups_algos_by_family_with_rank_and_wins(tmp_path):
     for col in instance_cols:
         for val in df[col].dropna().astype(str):
             assert pattern.match(val), f"T4 cell '{val}' in {col} violates format"
-    # Each family must have at least one starred (best-in-family) cell per
-    # instance — proves the marker logic actually fires.
+    # Multi-member families must have one starred (best-in-family) cell per
+    # instance — proves the marker logic fires. Single-member families
+    # (Construction = Greedy alone, Exact/Hybrid = CP-SAT alone) get no
+    # marker by design and report "n/a" for rank/wins.
     for fam in df["Family"].unique():
         fam_rows = df[df["Family"] == fam]
+        if len(fam_rows) < 2:
+            assert (fam_rows["Family Rank"] == "--").all()
+            assert (fam_rows["Family Wins"] == "--").all()
+            for col in instance_cols:
+                cells = fam_rows[col].dropna().astype(str)
+                assert not any(c.endswith("*") for c in cells), (
+                    f"Solo-member family {fam} should have no '*' marker"
+                )
+            continue
         for col in instance_cols:
             cells = fam_rows[col].dropna().astype(str)
             if cells.empty or all(c == "-" for c in cells):
