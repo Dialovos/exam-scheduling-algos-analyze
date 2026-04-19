@@ -125,6 +125,8 @@ All sourced from the [ITC 2007 Examination Track](https://www.eeecs.qub.ac.uk/it
 
 Trajectory methods (Tabu, SA, GD, LAHC, Kempe) take the row winner on every instance once families are aggregated to their best member. Construction (Greedy/DSatur) lands within a few percent on small sets but blows up on the dense ones. Population methods lag on the tightly-constrained sets (set3, set5, set7) where room-capacity reasoning matters. The discovered champion chain `alns -> kempe -> tabu` is the warm-start that most Trajectory winners actually run inside (see fig 3).
 
+The un-collapsed companion is `graphs/tables/t4_family_comparison.csv`: same data per algorithm, grouped by family, with `*` marking the family-best on each instance. Headline reads from that table — **Tabu carries Trajectory** (4 family wins), **GVNS** is the close second-best (2 wins, lowest mean intra-family rank); **ABC dominates Population** (7 of 8 family wins, mean intra-family rank 1.12). Family-loser slots (GD in Trajectory, HHO+ in Population) are visible at a glance because they have zero `*` cells.
+
 <br/>
 
 <table>
@@ -225,7 +227,14 @@ All paper-grade outputs live under `graphs/`:
 | `fig7_gap_heatmap.png` | Gap to CP-SAT IP optimum per algorithm and instance |
 | `fig8_gap_leaderboard.png` | Leaderboard: mean gap to IP with std across 5 solved instances |
 
-Tables are in `graphs/tables/` as both CSV (notebook/markdown) and LaTeX (paper).
+Tables are in `graphs/tables/` as both CSV (notebook/markdown) and LaTeX (paper):
+
+| File | Content |
+|------|---------|
+| `t1_leaderboard.{csv,tex}` | Algo × instance soft-penalty grid, sorted by mean rank. IP row shows full-converged CP-SAT (dash = timed out at 2 h; `*` on `set8` flags the evaluator-scale anomaly excluded from fig 7/8) |
+| `t2_chain_top5.{csv,tex}` | Top-5 chains discovered by the chain-finder, scored across all instances |
+| `t3_partial_adopt.{csv,tex}` | Tuner-proposed param deltas: which were adopted vs reverted, and why |
+| `t4_family_comparison.{csv,tex}` | Per-family algo breakdown (un-collapsed companion to fig 2). Cell = mean ± std soft penalty; `*` = family-best on that instance; *Family Rank* = mean intra-family rank, *Family Wins* = instances where this algo is best in its family |
 
 Regenerate with:
 
@@ -469,7 +478,7 @@ exam-scheduling/
 
 ## GenAI usage disclosure
 
-AI-assisted coding was used throughout development for algorithm implementation, debugging, and code refactoring. Experimental design, benchmarking, parameter choices, and writing were done by a non-AI entity.
+AI-assisted coding was used throughout development for algorithm implementation, debugging, and code refactoring.
 
 ## References
 
