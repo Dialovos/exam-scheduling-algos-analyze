@@ -17,7 +17,7 @@ from utils.plots.paper import (  # noqa: E402
     make_fig1, make_fig2, make_fig3, make_fig4, make_fig5, make_fig6,
     make_fig7, make_fig8,
 )
-from utils.tables.paper import make_t1, make_t2, make_t3  # noqa: E402
+from utils.tables.paper import make_t1, make_t2, make_t3, make_t4  # noqa: E402
 
 
 FIGS_DIR = REPO / "graphs"
@@ -29,7 +29,7 @@ def main():
     TABLES_DIR.mkdir(parents=True, exist_ok=True)
 
     t0 = time.time()
-    print("[paper] Rendering 8 figures + 3 tables...")
+    print("[paper] Rendering 8 figures + 4 tables...")
 
     make_fig1(FIGS_DIR / "fig1_pareto.png");              print("  [fig1] pareto done")
     make_fig2(FIGS_DIR / "fig2_family_heatmap.png");      print("  [fig2] family heatmap done")
@@ -43,6 +43,7 @@ def main():
     make_t1(TABLES_DIR); print("  [t1] leaderboard done")
     make_t2(TABLES_DIR); print("  [t2] chain top-5 done")
     make_t3(TABLES_DIR); print("  [t3] partial-adopt done")
+    make_t4(TABLES_DIR); print("  [t4] family comparison done")
 
     elapsed = time.time() - t0
     print(f"[paper] All outputs in {FIGS_DIR} (took {elapsed:.1f}s)")

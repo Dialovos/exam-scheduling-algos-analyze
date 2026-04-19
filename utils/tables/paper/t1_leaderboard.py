@@ -20,24 +20,19 @@ def _instance_list(df):
     return sorted(df["dataset"].unique())
 
 
-def _chain_row_from_top5(chain_top5, instances):
-    row = {"Algorithm": "Chain"}
-    per_ds = chain_top5.get("per_dataset_scores", {})
-    for ds in instances:
-        val = per_ds.get(ds)
-        row[ds] = "-" if val is None else f"{int(round(val))} +/- 0"
-    return row
+SET8_IP_ANOMALY = "exam_comp_set8"  # IP_soft = 25 — evaluator-scale mismatch
 
 
 def _ip_row(ip_soft, instances):
     row = {"Algorithm": "IP"}
     for ds in instances:
         payload = ip_soft.get(ds)
-        if payload is None:
+        if payload is None or not payload:
             row[ds] = "-"
         else:
             total = sum(payload.values())
-            row[ds] = f"{total} +/- 0"
+            marker = "*" if ds == SET8_IP_ANOMALY else ""
+            row[ds] = f"{total} +/- 0{marker}"
     return row
 
 
@@ -68,7 +63,6 @@ def make_t1(out_dir):
                 row[ds] = _fmt_cell(sub["mean"].iloc[0], sub["std"].iloc[0])
         rows.append(row)
 
-    rows.append(_chain_row_from_top5(b.chain_top5, instances))
     rows.append(_ip_row(b.ip_soft, instances))
 
     mean_soft = (df.groupby(["algorithm", "dataset"])["soft_penalty"].mean()
