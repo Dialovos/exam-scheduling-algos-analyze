@@ -1,0 +1,231 @@
+{
+  "total_chain_trials": 53,
+  "unique_structures": 38,
+  "feasible_structures": 38,
+  "best_chain": [
+    [
+      "alns",
+      {
+        "alns_iters": 1500
+      }
+    ],
+    [
+      "kempe",
+      {
+        "kempe_iters": 10000
+      }
+    ],
+    [
+      "tabu",
+      {
+        "tabu_iters": 2000,
+        "tabu_tenure": 20,
+        "tabu_patience": 500
+      }
+    ]
+  ],
+  "best_chain_score": 0.9281910563707739,
+  "top5": [
+    {
+      "rank": 1,
+      "chain": [
+        [
+          "alns",
+          {
+            "alns_iters": 1500
+          }
+        ],
+        [
+          "kempe",
+          {
+            "kempe_iters": 10000
+          }
+        ],
+        [
+          "tabu",
+          {
+            "tabu_iters": 2000,
+            "tabu_tenure": 20,
+            "tabu_patience": 500
+          }
+        ]
+      ],
+      "score": 0.9281910563707739,
+      "n_evaluations": 2
+    },
+    {
+      "rank": 2,
+      "chain": [
+        [
+          "kempe",
+          {
+            "kempe_iters": 10000
+          }
+        ],
+        [
+          "tabu",
+          {
+            "tabu_iters": 2000,
+            "tabu_tenure": 20,
+            "tabu_patience": 500
+          }
+        ],
+        [
+          "alns",
+          {
+            "alns_iters": 1500
+          }
+        ],
+        [
+          "kempe",
+          {
+            "kempe_iters": 10000
+          }
+        ],
+        [
+          "alns",
+          {
+            "alns_iters": 1500
+          }
+        ],
+        [
+          "vns",
+          {
+            "vns_iters": 21434,
+            "vns_budget": 13
+          }
+        ],
+        [
+          "tabu",
+          {
+            "tabu_iters": 2000,
+            "tabu_tenure": 20,
+            "tabu_patience": 500
+          }
+        ]
+      ],
+      "score": 0.9319285887048605,
+      "n_evaluations": 2
+    },
+    {
+      "rank": 3,
+      "chain": [
+        [
+          "kempe",
+          {
+            "kempe_iters": 10000
+          }
+        ],
+        [
+          "kempe",
+          {
+            "kempe_iters": 10000
+          }
+        ],
+        [
+          "tabu",
+          {
+            "tabu_iters": 2000,
+            "tabu_tenure": 20,
+            "tabu_patience": 500
+          }
+        ],
+        [
+          "abc",
+          {
+            "abc_pop": 10,
+            "abc_iters": 3000
+          }
+        ]
+      ],
+      "score": 0.9334470528902574,
+      "n_evaluations": 3
+    },
+    {
+      "rank": 4,
+      "chain": [
+        [
+          "kempe",
+          {
+            "kempe_iters": 10000
+          }
+        ],
+        [
+          "alns",
+          {
+            "alns_iters": 1500
+          }
+        ],
+        [
+          "kempe",
+          {
+            "kempe_iters": 10000
+          }
+        ],
+        [
+          "alns",
+          {
+            "alns_iters": 1500
+          }
+        ],
+        [
+          "vns",
+          {
+            "vns_iters": 21434,
+            "vns_budget": 13
+          }
+        ],
+        [
+          "tabu",
+          {
+            "tabu_iters": 2000,
+            "tabu_tenure": 20,
+            "tabu_patience": 500
+          }
+        ]
+      ],
+      "score": 0.9489056420286668,
+      "n_evaluations": 2
+    },
+    {
+      "rank": 5,
+      "chain": [
+        [
+          "gd",
+          {
+            "gd_iters": 5000
+          }
+        ],
+        [
+          "vns",
+          {
+            "vns_iters": 5000,
+            "vns_budget": 39
+          }
+        ],
+        [
+          "tabu",
+          {
+            "tabu_iters": 2000,
+            "tabu_tenure": 20,
+            "tabu_patience": 500
+          }
+        ],
+        [
+          "gd",
+          {
+            "gd_iters": 5000
+          }
+        ],
+        [
+          "alns",
+          {
+            "alns_iters": 877
+          }
+        ]
+      ],
+      "score": 0.9730185497470489,
+      "n_evaluations": 2
+    }
+  ]
+}

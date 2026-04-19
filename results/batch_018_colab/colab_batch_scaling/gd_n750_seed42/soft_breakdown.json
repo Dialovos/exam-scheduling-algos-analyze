@@ -1,0 +1,11 @@
+{
+  "Great Deluge": {
+    "two_in_a_row": 22851,
+    "two_in_a_day": 5995,
+    "period_spread": 7575,
+    "non_mixed_durations": 850,
+    "front_load": 40,
+    "period_penalty": 12650,
+    "room_penalty": 0
+  }
+}

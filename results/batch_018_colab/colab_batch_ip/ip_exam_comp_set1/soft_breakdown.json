@@ -1,0 +1,11 @@
+{
+  "IP": {
+    "two_in_a_row": 889,
+    "two_in_a_day": 0,
+    "period_spread": 4390,
+    "non_mixed_durations": 1350,
+    "front_load": 260,
+    "period_penalty": 420,
+    "room_penalty": 1200
+  }
+}

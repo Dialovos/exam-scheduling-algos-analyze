@@ -1,0 +1,11 @@
+{
+  "GVNS": {
+    "two_in_a_row": 8190,
+    "two_in_a_day": 4250,
+    "period_spread": 3565,
+    "non_mixed_durations": 320,
+    "front_load": 40,
+    "period_penalty": 1750,
+    "room_penalty": 0
+  }
+}

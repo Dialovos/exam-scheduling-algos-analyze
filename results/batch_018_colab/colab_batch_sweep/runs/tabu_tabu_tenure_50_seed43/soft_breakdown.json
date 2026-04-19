@@ -1,0 +1,11 @@
+{
+  "Tabu Search": {
+    "two_in_a_row": 837,
+    "two_in_a_day": 430,
+    "period_spread": 540,
+    "non_mixed_durations": 1190,
+    "front_load": 75,
+    "period_penalty": 3600,
+    "room_penalty": 0
+  }
+}

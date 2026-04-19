@@ -1,0 +1,8 @@
+{
+  "Greedy": {
+    "runtime": 0.080928,
+    "feasible": false,
+    "hard": 1,
+    "soft": 62180
+  }
+}

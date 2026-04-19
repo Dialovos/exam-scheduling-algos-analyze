@@ -1,0 +1,45 @@
+Top 5 chains  (53 evaluations, 38 unique structures, 38 feasible)
+==============================================================================
+
+#1  score=0.9282  evaluated 2x
+    alns -> kempe -> tabu
+      step 1: alns     alns_iters=1500
+      step 2: kempe    kempe_iters=10000
+      step 3: tabu     tabu_iters=2000  tabu_patience=500  tabu_tenure=20
+
+#2  score=0.9319  evaluated 2x
+    kempe -> tabu -> alns -> kempe -> alns -> vns -> tabu
+      step 1: kempe    kempe_iters=10000
+      step 2: tabu     tabu_iters=2000  tabu_patience=500  tabu_tenure=20
+      step 3: alns     alns_iters=1500
+      step 4: kempe    kempe_iters=10000
+      step 5: alns     alns_iters=1500
+      step 6: vns      vns_budget=13  vns_iters=21434
+      step 7: tabu     tabu_iters=2000  tabu_patience=500  tabu_tenure=20
+
+#3  score=0.9334  evaluated 3x
+    kempe -> kempe -> tabu -> abc
+      step 1: kempe    kempe_iters=10000
+      step 2: kempe    kempe_iters=10000
+      step 3: tabu     tabu_iters=2000  tabu_patience=500  tabu_tenure=20
+      step 4: abc      abc_iters=3000  abc_pop=10
+
+#4  score=0.9489  evaluated 2x
+    kempe -> alns -> kempe -> alns -> vns -> tabu
+      step 1: kempe    kempe_iters=10000
+      step 2: alns     alns_iters=1500
+      step 3: kempe    kempe_iters=10000
+      step 4: alns     alns_iters=1500
+      step 5: vns      vns_budget=13  vns_iters=21434
+      step 6: tabu     tabu_iters=2000  tabu_patience=500  tabu_tenure=20
+
+#5  score=0.9730  evaluated 2x
+    gd -> vns -> tabu -> gd -> alns
+      step 1: gd       gd_iters=5000
+      step 2: vns      vns_budget=39  vns_iters=5000
+      step 3: tabu     tabu_iters=2000  tabu_patience=500  tabu_tenure=20
+      step 4: gd       gd_iters=5000
+      step 5: alns     alns_iters=877
+
+==============================================================================
+saved best_chain (score=0.9282):  alns -> kempe -> tabu

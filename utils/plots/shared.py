@@ -262,3 +262,76 @@ def _save(fig, path):
     """Persist *fig* to *path* with consistent DPI/bounding. No-op if path is falsy."""
     if path:
         fig.savefig(path, dpi=150, bbox_inches="tight")
+
+
+# ── Paper-figure extensions (batch_018) ──────────────────────────────────
+
+FAMILY_COLORS = dict(FAMILY_COLORS, Chain="#2E7D32")
+FAMILY_ORDER_WITH_CHAIN = FAMILY_ORDER + ["Chain"]
+
+
+def normalize_per_instance(df, metric="soft_penalty"):
+    """Return a copy of *df* with a ``soft_norm`` column.
+
+    ``soft_norm = metric / per-dataset-min(metric)`` so cross-instance
+    aggregation is apples-to-apples (1.0 = best on that instance).
+    """
+    import pandas as pd
+
+    out = df.copy()
+    mins = out.groupby("dataset")[metric].transform("min")
+    out["soft_norm"] = out[metric] / mins
+    return out
+
+
+from dataclasses import dataclass as _dc
+
+
+@_dc
+class Batch018:
+    """Bundle of DataFrames + lookups loaded from ``results/batch_018_colab``."""
+    main: "object"
+    scaling: "object"
+    sweep: "object"
+    ip_soft: dict
+    chain_top5: dict
+    family_map: dict
+
+
+def load_batch018(root=None):
+    """Load every DataFrame + lookup needed by the paper figures.
+
+    *root* defaults to ``results/batch_018_colab`` relative to repo root.
+    """
+    import json
+    from pathlib import Path
+
+    import pandas as pd
+
+    if root is None:
+        here = Path(__file__).resolve().parents[2]
+        root = here / "results" / "batch_018_colab"
+    root = Path(root)
+
+    main = pd.read_csv(root / "aggregated.csv")
+    scaling = pd.read_csv(root / "colab_batch_scaling" / "aggregated.csv")
+    sweep = pd.read_csv(root / "colab_batch_sweep" / "sensitivity.csv")
+
+    ip_soft = {}
+    for ip_dir in sorted((root / "colab_batch_ip").glob("ip_exam_comp_set*")):
+        payload = json.loads((ip_dir / "soft_breakdown.json").read_text())
+        if "IP" in payload:
+            ip_soft[ip_dir.name.replace("ip_", "")] = payload["IP"]
+
+    chain_top5 = json.loads(
+        (root / "colab_batch_chain" / "top5_chains.json").read_text()
+    )
+
+    return Batch018(
+        main=main,
+        scaling=scaling,
+        sweep=sweep,
+        ip_soft=ip_soft,
+        chain_top5=chain_top5,
+        family_map=dict(ALGO_FAMILY),
+    )

@@ -1,0 +1,6 @@
+Rank,Chain,Score,n_evals,Total_Iters,Per-step Params
+1,alns -> kempe -> tabu,0.9282,2,13500,"alns(alns_iters=1500); kempe(kempe_iters=10000); tabu(tabu_iters=2000, tabu_tenure=20, tabu_patience=500)"
+2,kempe -> tabu -> alns -> kempe -> alns -> vns -> tabu,0.9319,2,48434,"kempe(kempe_iters=10000); tabu(tabu_iters=2000, tabu_tenure=20, tabu_patience=500); alns(alns_iters=1500); kempe(kempe_iters=10000); alns(alns_iters=1500); vns(vns_iters=21434, vns_budget=13); tabu(tabu_iters=2000, tabu_tenure=20, tabu_patience=500)"
+3,kempe -> kempe -> tabu -> abc,0.9334,3,25000,"kempe(kempe_iters=10000); kempe(kempe_iters=10000); tabu(tabu_iters=2000, tabu_tenure=20, tabu_patience=500); abc(abc_pop=10, abc_iters=3000)"
+4,kempe -> alns -> kempe -> alns -> vns -> tabu,0.9489,2,46434,"kempe(kempe_iters=10000); alns(alns_iters=1500); kempe(kempe_iters=10000); alns(alns_iters=1500); vns(vns_iters=21434, vns_budget=13); tabu(tabu_iters=2000, tabu_tenure=20, tabu_patience=500)"
+5,gd -> vns -> tabu -> gd -> alns,0.9730,2,17877,"gd(gd_iters=5000); vns(vns_iters=5000, vns_budget=39); tabu(tabu_iters=2000, tabu_tenure=20, tabu_patience=500); gd(gd_iters=5000); alns(alns_iters=877)"

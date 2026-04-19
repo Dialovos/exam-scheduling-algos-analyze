@@ -1,0 +1,8 @@
+{
+  "Multi-Neighbourhood SA": {
+    "runtime": 0.651202,
+    "feasible": false,
+    "hard": 384,
+    "soft": 14246
+  }
+}
