@@ -234,7 +234,7 @@ Tables are in `graphs/tables/` as both CSV (notebook/markdown) and LaTeX (paper)
 | `t1_leaderboard.{csv,tex}` | Algo × instance soft-penalty grid, sorted by mean rank. IP row shows full-converged CP-SAT (dash = timed out at 2 h; `*` on `set8` flags the evaluator-scale anomaly excluded from fig 7/8) |
 | `t2_chain_top5.{csv,tex}` | Top-5 chains discovered by the chain-finder, scored across all instances |
 | `t3_partial_adopt.{csv,tex}` | Tuner-proposed param deltas: which were adopted vs reverted, and why |
-| `t4_family_comparison.{csv,tex}` | Per-family algo breakdown (un-collapsed companion to fig 2). Cell = mean ± std soft penalty; `*` = family-best on that instance; *Family Rank* = mean intra-family rank, *Family Wins* = instances where this algo is best in its family |
+| `t4_family_comparison.{csv,tex}` | Per-family algo breakdown (un-collapsed companion to fig 2). Cell = mean ± std soft penalty; `*` = family-best on that instance (only fires when 2+ algos compete in the family on that row); *Family Rank* = mean intra-family rank, *Family Wins* = instances where this algo is best in its family. Solo-member families (Construction = Greedy alone; Exact/Hybrid = CP-SAT alone) report `--` for both columns |
 
 Regenerate with:
 

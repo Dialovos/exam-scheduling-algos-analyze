@@ -47,17 +47,22 @@ def make_t4(out_dir):
     means = grouped.pivot(index="algorithm", columns="dataset", values="mean")
     stds = grouped.pivot(index="algorithm", columns="dataset", values="std")
 
-    # Family-best per instance (used both for the * marker and the win count)
+    # Family-best per instance — only meaningful when the family has 2+
+    # competing algos on that instance. Single-member families (Construction
+    # = Greedy alone, Exact/Hybrid = CP-SAT alone in this batch) would
+    # otherwise "win" trivially every row, which is misleading.
     algo_to_family = {a: ALGO_FAMILY.get(a, "Other") for a in means.index}
     fam_best = {}  # (family, dataset) -> winning algorithm
     fam_wins = {a: 0 for a in means.index}
+    fam_size = {f: sum(1 for a in algo_to_family.values() if a == f)
+                for f in set(algo_to_family.values())}
     for fam in FAMILY_ORDER + ["Other"]:
         fam_algos = [a for a, f in algo_to_family.items() if f == fam]
-        if not fam_algos:
+        if len(fam_algos) < 2:
             continue
         for ds in instances:
             sub = means.loc[fam_algos, ds].dropna()
-            if sub.empty:
+            if len(sub) < 2:
                 continue
             winner = sub.idxmin()
             fam_best[(fam, ds)] = winner
@@ -88,9 +93,17 @@ def make_t4(out_dir):
                 s = stds.loc[a, ds] if ds in stds.columns else float("nan")
                 marker = "*" if fam_best.get((fam, ds)) == a else ""
                 row[ds] = _fmt_cell(m, s, marker=marker)
-            row["Family Rank"] = (f"{fam_rank[a]:.2f}"
-                                  if a in fam_rank else "-")
-            row["Family Wins"] = str(fam_wins.get(a, 0))
+            # Intra-family rank/wins are only defined when the family has
+            # 2+ members; for solo-family algos we report "--" to avoid the
+            # "1.00 / 8 wins" trap. (Sentinel is "--" not "n/a" so pandas
+            # doesn't auto-coerce it to NaN on round-trip.)
+            if fam_size.get(fam, 0) < 2:
+                row["Family Rank"] = "--"
+                row["Family Wins"] = "--"
+            else:
+                row["Family Rank"] = (f"{fam_rank[a]:.2f}"
+                                      if a in fam_rank else "-")
+                row["Family Wins"] = str(fam_wins.get(a, 0))
             rows.append(row)
 
     columns = (["Algorithm", "Family"] + list(instances)
