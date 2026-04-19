@@ -1,0 +1,11 @@
+{
+  "Greedy": {
+    "two_in_a_row": 28863,
+    "two_in_a_day": 6480,
+    "period_spread": 9307,
+    "non_mixed_durations": 1120,
+    "front_load": 30,
+    "period_penalty": 22800,
+    "room_penalty": 0
+  }
+}

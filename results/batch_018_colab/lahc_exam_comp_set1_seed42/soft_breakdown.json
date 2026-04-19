@@ -1,0 +1,11 @@
+{
+  "LAHC": {
+    "two_in_a_row": 4592,
+    "two_in_a_day": 0,
+    "period_spread": 6857,
+    "non_mixed_durations": 1230,
+    "front_load": 295,
+    "period_penalty": 740,
+    "room_penalty": 2250
+  }
+}

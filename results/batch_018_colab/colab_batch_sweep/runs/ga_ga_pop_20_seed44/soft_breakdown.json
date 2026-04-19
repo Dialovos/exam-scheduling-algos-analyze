@@ -1,0 +1,11 @@
+{
+  "Genetic Algorithm": {
+    "two_in_a_row": 2979,
+    "two_in_a_day": 1505,
+    "period_spread": 2043,
+    "non_mixed_durations": 1660,
+    "front_load": 175,
+    "period_penalty": 5100,
+    "room_penalty": 0
+  }
+}

@@ -35,15 +35,16 @@ test: $(BIN)
 	@echo "=== exam_comp_set7 ==="
 	$(BIN) instances/exam_comp_set7.exam --algo all --tabu-iters 2000 -v
 
-# Smoke-run the solver and regenerate every paper figure from the latest
-# batch. REPRO_BATCH picks which run_log.csv feeds the plots — override
-# it on the CLI if you want to target a different cached batch:
-#   make reproduce REPRO_BATCH=results/batch_017_tunning8
-REPRO_BATCH ?= results/batch_017_tunning8
+# Smoke-run the solver and regenerate every paper figure from the cached
+# batch. REPRO_BATCH points at the batch directory whose
+# `make_paper_figures.py` is invoked — override on the CLI to target a
+# different cached batch:
+#   make reproduce REPRO_BATCH=results/batch_018_colab
+REPRO_BATCH ?= results/batch_018_colab
 reproduce: $(BIN)
 	@echo "=== Smoke: Tabu on exam_comp_set1 ==="
 	@$(BIN) instances/exam_comp_set1.exam --algo tabu --seed 42 --tabu-iters 200 2>/dev/null | tail -n +1 | head -25
 	@echo ""
-	@echo "=== Regenerating figures from $(REPRO_BATCH) into graphs/ ==="
-	python3 -m tooling.regen_figures --from $(REPRO_BATCH) --out graphs/
+	@echo "=== Regenerating paper figures from $(REPRO_BATCH) into graphs/ ==="
+	python3 $(REPRO_BATCH)/make_paper_figures.py
 	@echo "=== Done. Figures written to graphs/ ==="

@@ -1,0 +1,8 @@
+Algorithm,Param,Pre-Study,Tuner-Proposed,Quality Change,Runtime Mult,Verdict
+Kempe,iters,10000,16284,+15%,1.52x,adopted
+Tabu,iters,2000,3162,+6%,1.55x,adopted
+Tabu,tenure,(bundled),(bundled),(part of tabu iters A/B),,adopted
+Tabu,patience,(bundled),(bundled),(part of tabu iters A/B),,adopted
+ALNS,iters,1500,14341,+7%,7.58x,reverted
+GVNS,iters,5000,41117,+1.6%,9.08x,reverted
+GVNS,budget,0,62,(part of gvns iters A/B),,reverted

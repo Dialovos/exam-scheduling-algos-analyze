@@ -1,0 +1,11 @@
+{
+  "ABC": {
+    "two_in_a_row": 1530,
+    "two_in_a_day": 1480,
+    "period_spread": 1862,
+    "non_mixed_durations": 1160,
+    "front_load": 105,
+    "period_penalty": 1550,
+    "room_penalty": 0
+  }
+}

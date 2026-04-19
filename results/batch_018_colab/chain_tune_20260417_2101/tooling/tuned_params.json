@@ -1,0 +1,79 @@
+{
+  "version": 2,
+  "timestamp": "2026-04-17T19:50:39.770336",
+  "params": {
+    "tabu": {
+      "tabu_iters": 3162,
+      "tabu_tenure": 28,
+      "tabu_patience": 956
+    },
+    "sa": {
+      "sa_iters": 5000
+    },
+    "kempe": {
+      "kempe_iters": 16284
+    },
+    "alns": {
+      "alns_iters": 14341
+    },
+    "gd": {
+      "gd_iters": 5000
+    },
+    "abc": {
+      "abc_pop": 30,
+      "abc_iters": 3000
+    },
+    "ga": {
+      "ga_pop": 30,
+      "ga_iters": 400
+    },
+    "lahc": {
+      "lahc_iters": 5000,
+      "lahc_list": 0
+    },
+    "woa": {
+      "woa_pop": 25,
+      "woa_iters": 3000
+    },
+    "vns": {
+      "vns_iters": 41117,
+      "vns_budget": 62
+    }
+  },
+  "aggregate_score": 0.971695692393001,
+  "per_dataset_scores": {
+    "exam_comp_set1": 8373.0,
+    "exam_comp_set2": 2076.0,
+    "exam_comp_set3": 22745.0,
+    "exam_comp_set4": 20042.0,
+    "exam_comp_set5": 4922.0,
+    "exam_comp_set6": 29650.0,
+    "exam_comp_set7": 8138.0,
+    "exam_comp_set8": 12861.0
+  },
+  "trial_count": 173,
+  "source": "auto_tuner",
+  "best_chain": [
+    [
+      "alns",
+      {
+        "alns_iters": 1500
+      }
+    ],
+    [
+      "kempe",
+      {
+        "kempe_iters": 10000
+      }
+    ],
+    [
+      "tabu",
+      {
+        "tabu_iters": 2000,
+        "tabu_tenure": 20,
+        "tabu_patience": 500
+      }
+    ]
+  ],
+  "best_chain_score": 0.9281910563707739
+}

@@ -1,0 +1,11 @@
+\begin{tabular}{lrrrrr}
+\toprule
+Rank & Chain & Score & n\_evals & Total\_Iters & Per-step Params \\
+\midrule
+1 & alns -> kempe -> tabu & 0.9282 & 2 & 13500 & alns(alns\_iters=1500); kempe(kempe\_iters=10000); tabu(tabu\_iters=2000, tabu\_tenure=20, tabu\_patience=500) \\
+2 & kempe -> tabu -> alns -> kempe -> alns -> vns -> tabu & 0.9319 & 2 & 48434 & kempe(kempe\_iters=10000); tabu(tabu\_iters=2000, tabu\_tenure=20, tabu\_patience=500); alns(alns\_iters=1500); kempe(kempe\_iters=10000); alns(alns\_iters=1500); vns(vns\_iters=21434, vns\_budget=13); tabu(tabu\_iters=2000, tabu\_tenure=20, tabu\_patience=500) \\
+3 & kempe -> kempe -> tabu -> abc & 0.9334 & 3 & 25000 & kempe(kempe\_iters=10000); kempe(kempe\_iters=10000); tabu(tabu\_iters=2000, tabu\_tenure=20, tabu\_patience=500); abc(abc\_pop=10, abc\_iters=3000) \\
+4 & kempe -> alns -> kempe -> alns -> vns -> tabu & 0.9489 & 2 & 46434 & kempe(kempe\_iters=10000); alns(alns\_iters=1500); kempe(kempe\_iters=10000); alns(alns\_iters=1500); vns(vns\_iters=21434, vns\_budget=13); tabu(tabu\_iters=2000, tabu\_tenure=20, tabu\_patience=500) \\
+5 & gd -> vns -> tabu -> gd -> alns & 0.9730 & 2 & 17877 & gd(gd\_iters=5000); vns(vns\_iters=5000, vns\_budget=39); tabu(tabu\_iters=2000, tabu\_tenure=20, tabu\_patience=500); gd(gd\_iters=5000); alns(alns\_iters=877) \\
+\bottomrule
+\end{tabular}

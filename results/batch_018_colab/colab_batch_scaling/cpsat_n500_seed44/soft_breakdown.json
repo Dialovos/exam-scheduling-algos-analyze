@@ -1,0 +1,11 @@
+{
+  "CP-SAT B&B": {
+    "two_in_a_row": 4761,
+    "two_in_a_day": 1945,
+    "period_spread": 2578,
+    "non_mixed_durations": 670,
+    "front_load": 85,
+    "period_penalty": 700,
+    "room_penalty": 0
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "CP-SAT B&B": {
+    "runtime": 9.408969,
+    "feasible": false,
+    "hard": 323,
+    "soft": 24795
+  }
+}

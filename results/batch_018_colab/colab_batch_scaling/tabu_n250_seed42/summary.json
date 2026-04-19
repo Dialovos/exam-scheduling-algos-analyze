@@ -1,0 +1,8 @@
+{
+  "Tabu Search": {
+    "runtime": 4.651056,
+    "feasible": false,
+    "hard": 24,
+    "soft": 27648
+  }
+}

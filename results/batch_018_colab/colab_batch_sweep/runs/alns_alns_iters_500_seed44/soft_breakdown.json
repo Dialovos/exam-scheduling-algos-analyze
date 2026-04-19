@@ -1,0 +1,11 @@
+{
+  "ALNS": {
+    "two_in_a_row": 8946,
+    "two_in_a_day": 2670,
+    "period_spread": 3468,
+    "non_mixed_durations": 1230,
+    "front_load": 225,
+    "period_penalty": 32500,
+    "room_penalty": 0
+  }
+}

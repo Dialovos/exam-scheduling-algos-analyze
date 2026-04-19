@@ -1,0 +1,11 @@
+{
+  "Multi-Neighbourhood SA": {
+    "two_in_a_row": 6660,
+    "two_in_a_day": 2270,
+    "period_spread": 2989,
+    "non_mixed_durations": 1680,
+    "front_load": 230,
+    "period_penalty": 16700,
+    "room_penalty": 0
+  }
+}

@@ -1,0 +1,2155 @@
+{
+  "datasets": [
+    "/content/exam-scheduling-algos-analyze/instances/exam_comp_set1.exam",
+    "/content/exam-scheduling-algos-analyze/instances/exam_comp_set2.exam",
+    "/content/exam-scheduling-algos-analyze/instances/exam_comp_set3.exam",
+    "/content/exam-scheduling-algos-analyze/instances/exam_comp_set4.exam",
+    "/content/exam-scheduling-algos-analyze/instances/exam_comp_set5.exam",
+    "/content/exam-scheduling-algos-analyze/instances/exam_comp_set6.exam",
+    "/content/exam-scheduling-algos-analyze/instances/exam_comp_set7.exam",
+    "/content/exam-scheduling-algos-analyze/instances/exam_comp_set8.exam"
+  ],
+  "phase": "done",
+  "total_trials": 173,
+  "best_params": {
+    "tabu": {
+      "tabu_iters": 3162,
+      "tabu_tenure": 28,
+      "tabu_patience": 956
+    },
+    "sa": {
+      "sa_iters": 5000
+    },
+    "kempe": {
+      "kempe_iters": 16284
+    },
+    "alns": {
+      "alns_iters": 14341
+    },
+    "gd": {
+      "gd_iters": 5000
+    },
+    "abc": {
+      "abc_pop": 30,
+      "abc_iters": 3000
+    },
+    "ga": {
+      "ga_pop": 30,
+      "ga_iters": 400
+    },
+    "lahc": {
+      "lahc_iters": 5000,
+      "lahc_list": 0
+    },
+    "woa": {
+      "woa_pop": 25,
+      "woa_iters": 3000
+    },
+    "vns": {
+      "vns_iters": 41117,
+      "vns_budget": 62
+    }
+  },
+  "best_scores": {
+    "tabu": 1.0042183479988414,
+    "sa": 2.112947278147079,
+    "kempe": 1.1132341048909165,
+    "alns": 1.9476641011415112,
+    "gd": 11.451489451746394,
+    "abc": 1.2715070856551303,
+    "ga": 1.987721511486614,
+    "lahc": 1.5607235377575583,
+    "woa": 1.4601713544652655,
+    "vns": 0.9426918417372451
+  },
+  "screen_raw": {
+    "tabu": {
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set2.exam": 2634.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set5.exam": 4922.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set6.exam": 29810.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set7.exam": 8138.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set1.exam": 8373.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set4.exam": 35994.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set8.exam": 12861.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set3.exam": 34479.0
+    },
+    "sa": {
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set1.exam": 17029.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set2.exam": 6962.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set4.exam": 23112.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set6.exam": 35255.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set5.exam": 31400.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set8.exam": 19400.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set7.exam": 22373.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set3.exam": 36523.0
+    },
+    "kempe": {
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set1.exam": 12380.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set5.exam": 10138.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set2.exam": 2076.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set8.exam": 14884.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set6.exam": 29650.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set4.exam": 20220.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set7.exam": 10740.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set3.exam": 26296.0
+    },
+    "alns": {
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set4.exam": 52073.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set6.exam": 29920.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set1.exam": 11443.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set5.exam": 17823.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set2.exam": 3119.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set8.exam": 18017.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set3.exam": 159306.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set7.exam": 23583.0
+    },
+    "gd": {
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set1.exam": 49693.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set2.exam": 147015.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set4.exam": 31063.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set6.exam": 32405.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set5.exam": 344718.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set8.exam": 526245.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set7.exam": 174522.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set3.exam": 153736.0
+    },
+    "abc": {
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set5.exam": 5527.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set1.exam": 13609.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set2.exam": 2864.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set8.exam": 14237.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set7.exam": 9738.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set6.exam": 33850.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set3.exam": 23548.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set4.exam": 34734.0
+    },
+    "ga": {
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set1.exam": 21790.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set2.exam": 5744.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set4.exam": 42662.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set5.exam": 11882.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set6.exam": 39795.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set3.exam": 47429.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set7.exam": 11965.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set8.exam": 20585.0
+    },
+    "lahc": {
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set1.exam": 15964.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set2.exam": 3539.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set4.exam": 27695.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set5.exam": 12577.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set6.exam": 32395.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set8.exam": 15036.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set7.exam": 12827.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set3.exam": 34655.0
+    },
+    "woa": {
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set2.exam": 3971.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set1.exam": 13097.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set5.exam": 11207.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set6.exam": 33160.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set8.exam": 15014.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set4.exam": 27515.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set7.exam": 10664.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set3.exam": 29374.0
+    },
+    "vns": {
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set1.exam": 11317.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set2.exam": 2486.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set4.exam": 20042.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set5.exam": 5512.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set6.exam": 31565.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set8.exam": 13830.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set3.exam": 22745.0,
+      "/content/exam-scheduling-algos-analyze/instances/exam_comp_set7.exam": 9955.0
+    }
+  },
+  "baselines": {
+    "/content/exam-scheduling-algos-analyze/instances/exam_comp_set1.exam": 8373.0,
+    "/content/exam-scheduling-algos-analyze/instances/exam_comp_set2.exam": 2076.0,
+    "/content/exam-scheduling-algos-analyze/instances/exam_comp_set3.exam": 22745.0,
+    "/content/exam-scheduling-algos-analyze/instances/exam_comp_set4.exam": 20042.0,
+    "/content/exam-scheduling-algos-analyze/instances/exam_comp_set5.exam": 4922.0,
+    "/content/exam-scheduling-algos-analyze/instances/exam_comp_set6.exam": 29650.0,
+    "/content/exam-scheduling-algos-analyze/instances/exam_comp_set7.exam": 8138.0,
+    "/content/exam-scheduling-algos-analyze/instances/exam_comp_set8.exam": 12861.0
+  },
+  "param_history": [
+    [
+      "tabu",
+      {
+        "tabu_iters": 3162,
+        "tabu_tenure": 28,
+        "tabu_patience": 316
+      },
+      1.0201113136859552
+    ],
+    [
+      "tabu",
+      {
+        "tabu_iters": 9564,
+        "tabu_tenure": 28,
+        "tabu_patience": 316
+      },
+      1.0201113136859552
+    ],
+    [
+      "tabu",
+      {
+        "tabu_iters": 3162,
+        "tabu_tenure": 41,
+        "tabu_patience": 316
+      },
+      1.043436449352877
+    ],
+    [
+      "tabu",
+      {
+        "tabu_iters": 3162,
+        "tabu_tenure": 28,
+        "tabu_patience": 956
+      },
+      1.0042183479988414
+    ],
+    [
+      "tabu",
+      {
+        "tabu_iters": 6613,
+        "tabu_tenure": 14,
+        "tabu_patience": 661
+      },
+      1.0118142156746137
+    ],
+    [
+      "tabu",
+      {
+        "tabu_iters": 1710,
+        "tabu_tenure": 18,
+        "tabu_patience": 1081
+      },
+      1.0146266358579663
+    ],
+    [
+      "tabu",
+      {
+        "tabu_iters": 3432,
+        "tabu_tenure": 12,
+        "tabu_patience": 2000
+      },
+      1.0142258237685928
+    ],
+    [
+      "alns",
+      {
+        "alns_iters": 2046
+      },
+      2.1795762370113416
+    ],
+    [
+      "alns",
+      {
+        "alns_iters": 4888
+      },
+      2.07938180817772
+    ],
+    [
+      "alns",
+      {
+        "alns_iters": 8372
+      },
+      2.038075099952434
+    ],
+    [
+      "alns",
+      {
+        "alns_iters": 11676
+      },
+      1.955846152406264
+    ],
+    [
+      "alns",
+      {
+        "alns_iters": 14341
+      },
+      1.9476641011415112
+    ],
+    [
+      "alns",
+      {
+        "alns_iters": 16284
+      },
+      106.42857095821996
+    ],
+    [
+      "alns",
+      {
+        "alns_iters": 13258
+      },
+      1.9527830411442366
+    ],
+    [
+      "kempe",
+      {
+        "kempe_iters": 2046
+      },
+      1.800961040599946
+    ],
+    [
+      "kempe",
+      {
+        "kempe_iters": 4888
+      },
+      1.4320673150402634
+    ],
+    [
+      "kempe",
+      {
+        "kempe_iters": 8372
+      },
+      1.2469317873787362
+    ],
+    [
+      "kempe",
+      {
+        "kempe_iters": 11676
+      },
+      1.185627431629596
+    ],
+    [
+      "kempe",
+      {
+        "kempe_iters": 14341
+      },
+      1.1528274817943918
+    ],
+    [
+      "kempe",
+      {
+        "kempe_iters": 16284
+      },
+      1.1132341048909165
+    ],
+    [
+      "kempe",
+      {
+        "kempe_iters": 17614
+      },
+      1.1210447305770161
+    ],
+    [
+      "vns",
+      {
+        "vns_iters": 7071,
+        "vns_budget": 55
+      },
+      1.0511427169896512
+    ],
+    [
+      "vns",
+      {
+        "vns_iters": 22865,
+        "vns_budget": 55
+      },
+      0.959873333814225
+    ],
+    [
+      "vns",
+      {
+        "vns_iters": 7071,
+        "vns_budget": 82
+      },
+      0.9874780135769221
+    ],
+    [
+      "vns",
+      {
+        "vns_iters": 22865,
+        "vns_budget": 82
+      },
+      0.9697112838017802
+    ],
+    [
+      "vns",
+      {
+        "vns_iters": 50000,
+        "vns_budget": 55
+      },
+      100.97573092653226
+    ],
+    [
+      "vns",
+      {
+        "vns_iters": 12715,
+        "vns_budget": 75
+      },
+      0.9771321167919637
+    ],
+    [
+      "vns",
+      {
+        "vns_iters": 41117,
+        "vns_budget": 62
+      },
+      0.9426918417372451
+    ]
+  ],
+  "chain_history": [
+    [
+      [
+        [
+          "sa",
+          {
+            "sa_iters": 5000
+          }
+        ],
+        [
+          "gd",
+          {
+            "gd_iters": 5000
+          }
+        ]
+      ],
+      1.1318718381112984
+    ],
+    [
+      [
+        [
+          "sa",
+          {
+            "sa_iters": 5000
+          }
+        ],
+        [
+          "lahc",
+          {
+            "lahc_iters": 5000,
+            "lahc_list": 0
+          }
+        ]
+      ],
+      1.1564924114671165
+    ],
+    [
+      [
+        [
+          "tabu",
+          {
+            "tabu_iters": 2000,
+            "tabu_tenure": 20,
+            "tabu_patience": 500
+          }
+        ],
+        [
+          "sa",
+          {
+            "sa_iters": 5000
+          }
+        ]
+      ],
+      1.0053962900505902
+    ],
+    [
+      [
+        [
+          "kempe",
+          {
+            "kempe_iters": 10000
+          }
+        ],
+        [
+          "sa",
+          {
+            "sa_iters": 5000
+          }
+        ]
+      ],
+      1.0
+    ],
+    [
+      [
+        [
+          "sa",
+          {
+            "sa_iters": 5000
+          }
+        ],
+        [
+          "kempe",
+          {
+            "kempe_iters": 10000
+          }
+        ],
+        [
+          "gd",
+          {
+            "gd_iters": 5000
+          }
+        ]
+      ],
+      1.0099494097807757
+    ],
+    [
+      [
+        [
+          "tabu",
+          {
+            "tabu_iters": 2000,
+            "tabu_tenure": 20,
+            "tabu_patience": 500
+          }
+        ],
+        [
+          "sa",
+          {
+            "sa_iters": 5000
+          }
+        ],
+        [
+          "gd",
+          {
+            "gd_iters": 5000
+          }
+        ]
+      ],
+      1.0053962900505902
+    ],
+    [
+      [
+        [
+          "kempe",
+          {
+            "kempe_iters": 10000
+          }
+        ],
+        [
+          "alns",
+          {
+            "alns_iters": 1500
+          }
+        ],
+        [
+          "kempe",
+          {
+            "kempe_iters": 10000
+          }
+        ],
+        [
+          "tabu",
+          {
+            "tabu_iters": 2000,
+            "tabu_tenure": 20,
+            "tabu_patience": 500
+          }
+        ]
+      ],
+      0.9849915682967959
+    ],
+    [
+      [
+        [
+          "alns",
+          {
+            "alns_iters": 1500
+          }
+        ],
+        [
+          "sa",
+          {
+            "sa_iters": 5000
+          }
+        ],
+        [
+          "kempe",
+          {
+            "kempe_iters": 10000
+          }
+        ]
+      ],
+      1.0074198988195615
+    ],
+    [
+      [
+        [
+          "vns",
+          {
+            "vns_iters": 5000,
+            "vns_budget": 0
+          }
+        ],
+        [
+          "sa",
+          {
+            "sa_iters": 5000
+          }
+        ],
+        [
+          "gd",
+          {
+            "gd_iters": 5000
+          }
+        ]
+      ],
+      1.0367622259696458
+    ],
+    [
+      [
+        [
+          "vns",
+          {
+            "vns_iters": 5069,
+            "vns_budget": 0
+          }
+        ],
+        [
+          "gd",
+          {
+            "gd_iters": 5000
+          }
+        ]
+      ],
+      1.0613827993254636
+    ],
+    [
+      [
+        [
+          "vns",
+          {
+            "vns_iters": 5000,
+            "vns_budget": 0
+          }
+        ],
+        [
+          "gd",
+          {
+            "gd_iters": 7677
+          }
+        ],
+        [
+          "alns",
+          {
+            "alns_iters": 1500
+          }
+        ],
+        [
+          "gd",
+          {
+            "gd_iters": 2744
+          }
+        ],
+        [
+          "vns",
+          {
+            "vns_iters": 6096,
+            "vns_budget": 0
+          }
+        ]
+      ],
+      0.9940978077571669
+    ],
+    [
+      [
+        [
+          "lahc",
+          {
+            "lahc_iters": 5000,
+            "lahc_list": 0
+          }
+        ],
+        [
+          "ga",
+          {
+            "ga_pop": 30,
+            "ga_iters": 400
+          }
+        ],
+        [
+          "lahc",
+          {
+            "lahc_iters": 1618,
+            "lahc_list": 0
+          }
+        ],
+        [
+          "gd",
+          {
+            "gd_iters": 5000
+          }
+        ],
+        [
+          "ga",
+          {
+            "ga_pop": 30,
+            "ga_iters": 400
+          }
+        ]
+      ],
+      1.084654300168634
+    ],
+    [
+      [
+        [
+          "gd",
+          {
+            "gd_iters": 5000
+          }
+        ],
+        [
+          "tabu",
+          {
+            "tabu_iters": 2000,
+            "tabu_tenure": 20,
+            "tabu_patience": 500
+          }
+        ],
+        [
+          "kempe",
+          {
+            "kempe_iters": 16196
+          }
+        ],
+        [
+          "alns",
+          {
+            "alns_iters": 877
+          }
+        ]
+      ],
+      0.9892074198988196
+    ],
+    [
+      [
+        [
+          "kempe",
+          {
+            "kempe_iters": 10000
+          }
+        ],
+        [
+          "woa",
+          {
+            "woa_pop": 17,
+            "woa_iters": 3000
+          }
+        ],
+        [
+          "kempe",
+          {
+            "kempe_iters": 3436
+          }
+        ],
+        [
+          "woa",
+          {
+            "woa_pop": 25,
+            "woa_iters": 3000
+          }
+        ]
+      ],
+      0.9851602023608769
+    ],
+    [
+      [
+        [
+          "lahc",
+          {
+            "lahc_iters": 5481,
+            "lahc_list": 0
+          }
+        ],
+        [
+          "ga",
+          {
+            "ga_pop": 20,
+            "ga_iters": 400
+          }
+        ],
+        [
+          "lahc",
+          {
+            "lahc_iters": 5000,
+            "lahc_list": 1075
+          }
+        ]
+      ],
+      1.0537942664418212
+    ],
+    [
+      [
+        [
+          "woa",
+          {
+            "woa_pop": 25,
+            "woa_iters": 1487
+          }
+        ],
+        [
+          "gd",
+          {
+            "gd_iters": 5000
+          }
+        ],
+        [
+          "ga",
+          {
+            "ga_pop": 20,
+            "ga_iters": 554
+          }
+        ]
+      ],
+      1.0929173693086003
+    ],
+    [
+      [
+        [
+          "alns",
+          {
+            "alns_iters": 1500
+          }
+        ],
+        [
+          "kempe",
+          {
+            "kempe_iters": 10000
+          }
+        ],
+        [
+          "tabu",
+          {
+            "tabu_iters": 2000,
+            "tabu_tenure": 20,
+            "tabu_patience": 500
+          }
+        ]
+      ],
+      0.9281910563707739
+    ],
+    [
+      [
+        [
+          "tabu",
+          {
+            "tabu_iters": 2000,
+            "tabu_tenure": 20,
+            "tabu_patience": 500
+          }
+        ],
+        [
+          "kempe",
+          {
+            "kempe_iters": 16196
+          }
+        ],
+        [
+          "alns",
+          {
+            "alns_iters": 877
+          }
+        ]
+      ],
+      1.0053962900505902
+    ],
+    [
+      [
+        [
+          "tabu",
+          {
+            "tabu_iters": 2000,
+            "tabu_tenure": 20,
+            "tabu_patience": 500
+          }
+        ],
+        [
+          "sa",
+          {
+            "sa_iters": 5000
+          }
+        ]
+      ],
+      1.0053962900505902
+    ],
+    [
+      [
+        [
+          "gd",
+          {
+            "gd_iters": 5664
+          }
+        ],
+        [
+          "sa",
+          {
+            "sa_iters": 5000
+          }
+        ]
+      ],
+      1.0996627318718382
+    ],
+    [
+      [
+        [
+          "kempe",
+          {
+            "kempe_iters": 10000
+          }
+        ],
+        [
+          "sa",
+          {
+            "sa_iters": 5000
+          }
+        ]
+      ],
+      1.0
+    ],
+    [
+      [
+        [
+          "kempe",
+          {
+            "kempe_iters": 10000
+          }
+        ],
+        [
+          "alns",
+          {
+            "alns_iters": 1500
+          }
+        ],
+        [
+          "kempe",
+          {
+            "kempe_iters": 10000
+          }
+        ],
+        [
+          "tabu",
+          {
+            "tabu_iters": 2000,
+            "tabu_tenure": 20,
+            "tabu_patience": 500
+          }
+        ],
+        [
+          "abc",
+          {
+            "abc_pop": 10,
+            "abc_iters": 3000
+          }
+        ]
+      ],
+      0.9849915682967959
+    ],
+    [
+      [
+        [
+          "kempe",
+          {
+            "kempe_iters": 10000
+          }
+        ],
+        [
+          "sa",
+          {
+            "sa_iters": 5000
+          }
+        ]
+      ],
+      1.0
+    ],
+    [
+      [
+        [
+          "gd",
+          {
+            "gd_iters": 5000
+          }
+        ],
+        [
+          "tabu",
+          {
+            "tabu_iters": 2000,
+            "tabu_tenure": 20,
+            "tabu_patience": 500
+          }
+        ],
+        [
+          "gd",
+          {
+            "gd_iters": 5000
+          }
+        ],
+        [
+          "alns",
+          {
+            "alns_iters": 877
+          }
+        ]
+      ],
+      0.9892074198988196
+    ],
+    [
+      [
+        [
+          "gd",
+          {
+            "gd_iters": 5000
+          }
+        ],
+        [
+          "vns",
+          {
+            "vns_iters": 5000,
+            "vns_budget": 39
+          }
+        ],
+        [
+          "tabu",
+          {
+            "tabu_iters": 2000,
+            "tabu_tenure": 20,
+            "tabu_patience": 500
+          }
+        ],
+        [
+          "gd",
+          {
+            "gd_iters": 5000
+          }
+        ],
+        [
+          "alns",
+          {
+            "alns_iters": 877
+          }
+        ]
+      ],
+      0.9730185497470489
+    ],
+    [
+      [
+        [
+          "kempe",
+          {
+            "kempe_iters": 10000
+          }
+        ],
+        [
+          "alns",
+          {
+            "alns_iters": 3519
+          }
+        ],
+        [
+          "kempe",
+          {
+            "kempe_iters": 10000
+          }
+        ],
+        [
+          "tabu",
+          {
+            "tabu_iters": 2000,
+            "tabu_tenure": 20,
+            "tabu_patience": 500
+          }
+        ]
+      ],
+      0.9849915682967959
+    ],
+    [
+      [
+        [
+          "kempe",
+          {
+            "kempe_iters": 10000
+          }
+        ],
+        [
+          "kempe",
+          {
+            "kempe_iters": 10000
+          }
+        ],
+        [
+          "tabu",
+          {
+            "tabu_iters": 2000,
+            "tabu_tenure": 20,
+            "tabu_patience": 500
+          }
+        ],
+        [
+          "abc",
+          {
+            "abc_pop": 10,
+            "abc_iters": 3000
+          }
+        ]
+      ],
+      0.9334470528902574
+    ],
+    [
+      [
+        [
+          "kempe",
+          {
+            "kempe_iters": 10000
+          }
+        ],
+        [
+          "woa",
+          {
+            "woa_pop": 17,
+            "woa_iters": 3000
+          }
+        ],
+        [
+          "woa",
+          {
+            "woa_pop": 25,
+            "woa_iters": 3000
+          }
+        ]
+      ],
+      0.9851602023608769
+    ],
+    [
+      [
+        [
+          "kempe",
+          {
+            "kempe_iters": 10000
+          }
+        ],
+        [
+          "sa",
+          {
+            "sa_iters": 5000
+          }
+        ]
+      ],
+      1.0
+    ],
+    [
+      [
+        [
+          "kempe",
+          {
+            "kempe_iters": 10000
+          }
+        ],
+        [
+          "alns",
+          {
+            "alns_iters": 1500
+          }
+        ],
+        [
+          "kempe",
+          {
+            "kempe_iters": 10000
+          }
+        ],
+        [
+          "alns",
+          {
+            "alns_iters": 1500
+          }
+        ],
+        [
+          "kempe",
+          {
+            "kempe_iters": 10000
+          }
+        ],
+        [
+          "tabu",
+          {
+            "tabu_iters": 2000,
+            "tabu_tenure": 20,
+            "tabu_patience": 500
+          }
+        ]
+      ],
+      0.9833052276559865
+    ],
+    [
+      [
+        [
+          "vns",
+          {
+            "vns_iters": 5000,
+            "vns_budget": 10
+          }
+        ],
+        [
+          "woa",
+          {
+            "woa_pop": 17,
+            "woa_iters": 3000
+          }
+        ],
+        [
+          "kempe",
+          {
+            "kempe_iters": 3436
+          }
+        ],
+        [
+          "woa",
+          {
+            "woa_pop": 25,
+            "woa_iters": 3000
+          }
+        ]
+      ],
+      1.0084317032040473
+    ],
+    [
+      [
+        [
+          "gd",
+          {
+            "gd_iters": 3966
+          }
+        ],
+        [
+          "abc",
+          {
+            "abc_pop": 34,
+            "abc_iters": 3000
+          }
+        ],
+        [
+          "sa",
+          {
+            "sa_iters": 5000
+          }
+        ]
+      ],
+      1.0860033726812817
+    ],
+    [
+      [
+        [
+          "vns",
+          {
+            "vns_iters": 2449,
+            "vns_budget": 0
+          }
+        ],
+        [
+          "alns",
+          {
+            "alns_iters": 3519
+          }
+        ],
+        [
+          "kempe",
+          {
+            "kempe_iters": 10000
+          }
+        ],
+        [
+          "tabu",
+          {
+            "tabu_iters": 2000,
+            "tabu_tenure": 20,
+            "tabu_patience": 500
+          }
+        ]
+      ],
+      1.0232715008431703
+    ],
+    [
+      [
+        [
+          "kempe",
+          {
+            "kempe_iters": 10000
+          }
+        ],
+        [
+          "tabu",
+          {
+            "tabu_iters": 2000,
+            "tabu_tenure": 20,
+            "tabu_patience": 500
+          }
+        ],
+        [
+          "abc",
+          {
+            "abc_pop": 10,
+            "abc_iters": 3000
+          }
+        ],
+        [
+          "vns",
+          {
+            "vns_iters": 5000,
+            "vns_budget": 39
+          }
+        ],
+        [
+          "tabu",
+          {
+            "tabu_iters": 2000,
+            "tabu_tenure": 20,
+            "tabu_patience": 500
+          }
+        ],
+        [
+          "gd",
+          {
+            "gd_iters": 5000
+          }
+        ],
+        [
+          "alns",
+          {
+            "alns_iters": 877
+          }
+        ]
+      ],
+      0.9735244519392917
+    ],
+    [
+      [
+        [
+          "kempe",
+          {
+            "kempe_iters": 10000
+          }
+        ],
+        [
+          "alns",
+          {
+            "alns_iters": 3519
+          }
+        ],
+        [
+          "kempe",
+          {
+            "kempe_iters": 10000
+          }
+        ],
+        [
+          "alns",
+          {
+            "alns_iters": 1500
+          }
+        ],
+        [
+          "kempe",
+          {
+            "kempe_iters": 10000
+          }
+        ],
+        [
+          "alns",
+          {
+            "alns_iters": 1500
+          }
+        ],
+        [
+          "kempe",
+          {
+            "kempe_iters": 10000
+          }
+        ],
+        [
+          "tabu",
+          {
+            "tabu_iters": 2000,
+            "tabu_tenure": 20,
+            "tabu_patience": 500
+          }
+        ]
+      ],
+      0.9764236907846997
+    ],
+    [
+      [
+        [
+          "gd",
+          {
+            "gd_iters": 50000
+          }
+        ],
+        [
+          "woa",
+          {
+            "woa_pop": 17,
+            "woa_iters": 3000
+          }
+        ],
+        [
+          "kempe",
+          {
+            "kempe_iters": 3436
+          }
+        ],
+        [
+          "woa",
+          {
+            "woa_pop": 25,
+            "woa_iters": 3000
+          }
+        ]
+      ],
+      1.0715008431703203
+    ],
+    [
+      [
+        [
+          "kempe",
+          {
+            "kempe_iters": 10000
+          }
+        ],
+        [
+          "alns",
+          {
+            "alns_iters": 1500
+          }
+        ],
+        [
+          "kempe",
+          {
+            "kempe_iters": 10000
+          }
+        ],
+        [
+          "alns",
+          {
+            "alns_iters": 1500
+          }
+        ],
+        [
+          "kempe",
+          {
+            "kempe_iters": 10000
+          }
+        ],
+        [
+          "tabu",
+          {
+            "tabu_iters": 2000,
+            "tabu_tenure": 20,
+            "tabu_patience": 500
+          }
+        ]
+      ],
+      0.9833052276559865
+    ],
+    [
+      [
+        [
+          "kempe",
+          {
+            "kempe_iters": 10000
+          }
+        ],
+        [
+          "alns",
+          {
+            "alns_iters": 3519
+          }
+        ],
+        [
+          "kempe",
+          {
+            "kempe_iters": 10000
+          }
+        ],
+        [
+          "tabu",
+          {
+            "tabu_iters": 2000,
+            "tabu_tenure": 20,
+            "tabu_patience": 307
+          }
+        ]
+      ],
+      0.9849915682967959
+    ],
+    [
+      [
+        [
+          "kempe",
+          {
+            "kempe_iters": 10000
+          }
+        ],
+        [
+          "kempe",
+          {
+            "kempe_iters": 3436
+          }
+        ],
+        [
+          "woa",
+          {
+            "woa_pop": 25,
+            "woa_iters": 3000
+          }
+        ]
+      ],
+      0.9924114671163575
+    ],
+    [
+      [
+        [
+          "kempe",
+          {
+            "kempe_iters": 10000
+          }
+        ],
+        [
+          "alns",
+          {
+            "alns_iters": 1500
+          }
+        ],
+        [
+          "kempe",
+          {
+            "kempe_iters": 10000
+          }
+        ],
+        [
+          "alns",
+          {
+            "alns_iters": 1500
+          }
+        ],
+        [
+          "vns",
+          {
+            "vns_iters": 21434,
+            "vns_budget": 13
+          }
+        ],
+        [
+          "tabu",
+          {
+            "tabu_iters": 2000,
+            "tabu_tenure": 20,
+            "tabu_patience": 500
+          }
+        ]
+      ],
+      0.9489056420286668
+    ],
+    [
+      [
+        [
+          "kempe",
+          {
+            "kempe_iters": 10000
+          }
+        ],
+        [
+          "alns",
+          {
+            "alns_iters": 1500
+          }
+        ],
+        [
+          "kempe",
+          {
+            "kempe_iters": 10000
+          }
+        ],
+        [
+          "alns",
+          {
+            "alns_iters": 1500
+          }
+        ],
+        [
+          "kempe",
+          {
+            "kempe_iters": 10000
+          }
+        ],
+        [
+          "tabu",
+          {
+            "tabu_iters": 2000,
+            "tabu_tenure": 20,
+            "tabu_patience": 500
+          }
+        ]
+      ],
+      0.9833052276559865
+    ],
+    [
+      [
+        [
+          "kempe",
+          {
+            "kempe_iters": 10000
+          }
+        ],
+        [
+          "kempe",
+          {
+            "kempe_iters": 10000
+          }
+        ],
+        [
+          "tabu",
+          {
+            "tabu_iters": 2000,
+            "tabu_tenure": 20,
+            "tabu_patience": 500
+          }
+        ],
+        [
+          "abc",
+          {
+            "abc_pop": 10,
+            "abc_iters": 3108
+          }
+        ]
+      ],
+      0.9851602023608769
+    ],
+    [
+      [
+        [
+          "kempe",
+          {
+            "kempe_iters": 10000
+          }
+        ],
+        [
+          "kempe",
+          {
+            "kempe_iters": 10000
+          }
+        ],
+        [
+          "lahc",
+          {
+            "lahc_iters": 24189,
+            "lahc_list": 0
+          }
+        ],
+        [
+          "tabu",
+          {
+            "tabu_iters": 2000,
+            "tabu_tenure": 20,
+            "tabu_patience": 500
+          }
+        ],
+        [
+          "abc",
+          {
+            "abc_pop": 10,
+            "abc_iters": 3000
+          }
+        ]
+      ],
+      0.9863406408094435
+    ],
+    [
+      [
+        [
+          "kempe",
+          {
+            "kempe_iters": 10000
+          }
+        ],
+        [
+          "tabu",
+          {
+            "tabu_iters": 2000,
+            "tabu_tenure": 20,
+            "tabu_patience": 500
+          }
+        ],
+        [
+          "abc",
+          {
+            "abc_pop": 10,
+            "abc_iters": 3000
+          }
+        ],
+        [
+          "vns",
+          {
+            "vns_iters": 5000,
+            "vns_budget": 39
+          }
+        ],
+        [
+          "tabu",
+          {
+            "tabu_iters": 2000,
+            "tabu_tenure": 20,
+            "tabu_patience": 500
+          }
+        ],
+        [
+          "gd",
+          {
+            "gd_iters": 5000
+          }
+        ],
+        [
+          "alns",
+          {
+            "alns_iters": 877
+          }
+        ],
+        [
+          "lahc",
+          {
+            "lahc_iters": 5796,
+            "lahc_list": 0
+          }
+        ]
+      ],
+      0.9735244519392917
+    ],
+    [
+      [
+        [
+          "kempe",
+          {
+            "kempe_iters": 10000
+          }
+        ],
+        [
+          "tabu",
+          {
+            "tabu_iters": 2000,
+            "tabu_tenure": 20,
+            "tabu_patience": 500
+          }
+        ],
+        [
+          "alns",
+          {
+            "alns_iters": 1500
+          }
+        ],
+        [
+          "kempe",
+          {
+            "kempe_iters": 10000
+          }
+        ],
+        [
+          "alns",
+          {
+            "alns_iters": 1500
+          }
+        ],
+        [
+          "vns",
+          {
+            "vns_iters": 21434,
+            "vns_budget": 13
+          }
+        ],
+        [
+          "tabu",
+          {
+            "tabu_iters": 2000,
+            "tabu_tenure": 20,
+            "tabu_patience": 500
+          }
+        ]
+      ],
+      0.9319285887048605
+    ],
+    [
+      [
+        [
+          "kempe",
+          {
+            "kempe_iters": 10000
+          }
+        ],
+        [
+          "alns",
+          {
+            "alns_iters": 3519
+          }
+        ],
+        [
+          "kempe",
+          {
+            "kempe_iters": 10000
+          }
+        ],
+        [
+          "alns",
+          {
+            "alns_iters": 1500
+          }
+        ],
+        [
+          "kempe",
+          {
+            "kempe_iters": 10000
+          }
+        ],
+        [
+          "alns",
+          {
+            "alns_iters": 1500
+          }
+        ],
+        [
+          "kempe",
+          {
+            "kempe_iters": 10000
+          }
+        ],
+        [
+          "tabu",
+          {
+            "tabu_iters": 2000,
+            "tabu_tenure": 20,
+            "tabu_patience": 500
+          }
+        ]
+      ],
+      0.9764236907846997
+    ],
+    [
+      [
+        [
+          "kempe",
+          {
+            "kempe_iters": 10000
+          }
+        ],
+        [
+          "alns",
+          {
+            "alns_iters": 1500
+          }
+        ],
+        [
+          "kempe",
+          {
+            "kempe_iters": 10000
+          }
+        ],
+        [
+          "alns",
+          {
+            "alns_iters": 1500
+          }
+        ],
+        [
+          "vns",
+          {
+            "vns_iters": 1000,
+            "vns_budget": 0
+          }
+        ],
+        [
+          "kempe",
+          {
+            "kempe_iters": 10000
+          }
+        ],
+        [
+          "tabu",
+          {
+            "tabu_iters": 2000,
+            "tabu_tenure": 20,
+            "tabu_patience": 500
+          }
+        ]
+      ],
+      0.984822934232715
+    ],
+    [
+      [
+        [
+          "gd",
+          {
+            "gd_iters": 5000
+          }
+        ],
+        [
+          "lahc",
+          {
+            "lahc_iters": 5000,
+            "lahc_list": 0
+          }
+        ],
+        [
+          "woa",
+          {
+            "woa_pop": 25,
+            "woa_iters": 3000
+          }
+        ],
+        [
+          "sa",
+          {
+            "sa_iters": 27637
+          }
+        ]
+      ],
+      0.9989881956155143
+    ],
+    [
+      [
+        [
+          "alns",
+          {
+            "alns_iters": 14341
+          }
+        ],
+        [
+          "kempe",
+          {
+            "kempe_iters": 16284
+          }
+        ],
+        [
+          "tabu",
+          {
+            "tabu_iters": 3162,
+            "tabu_tenure": 28,
+            "tabu_patience": 956
+          }
+        ]
+      ],
+      10207.483714581118
+    ],
+    [
+      [
+        [
+          "kempe",
+          {
+            "kempe_iters": 16284
+          }
+        ],
+        [
+          "tabu",
+          {
+            "tabu_iters": 3162,
+            "tabu_tenure": 28,
+            "tabu_patience": 956
+          }
+        ],
+        [
+          "alns",
+          {
+            "alns_iters": 14341
+          }
+        ],
+        [
+          "kempe",
+          {
+            "kempe_iters": 16284
+          }
+        ],
+        [
+          "alns",
+          {
+            "alns_iters": 14341
+          }
+        ],
+        [
+          "vns",
+          {
+            "vns_iters": 41117,
+            "vns_budget": 62
+          }
+        ],
+        [
+          "tabu",
+          {
+            "tabu_iters": 3162,
+            "tabu_tenure": 28,
+            "tabu_patience": 956
+          }
+        ]
+      ],
+      97.01476374239348
+    ],
+    [
+      [
+        [
+          "kempe",
+          {
+            "kempe_iters": 16284
+          }
+        ],
+        [
+          "kempe",
+          {
+            "kempe_iters": 16284
+          }
+        ],
+        [
+          "tabu",
+          {
+            "tabu_iters": 3162,
+            "tabu_tenure": 28,
+            "tabu_patience": 956
+          }
+        ],
+        [
+          "abc",
+          {
+            "abc_pop": 30,
+            "abc_iters": 3000
+          }
+        ]
+      ],
+      91.0208821265326
+    ],
+    [
+      [
+        [
+          "kempe",
+          {
+            "kempe_iters": 16284
+          }
+        ],
+        [
+          "alns",
+          {
+            "alns_iters": 14341
+          }
+        ],
+        [
+          "kempe",
+          {
+            "kempe_iters": 16284
+          }
+        ],
+        [
+          "alns",
+          {
+            "alns_iters": 14341
+          }
+        ],
+        [
+          "vns",
+          {
+            "vns_iters": 41117,
+            "vns_budget": 62
+          }
+        ],
+        [
+          "tabu",
+          {
+            "tabu_iters": 3162,
+            "tabu_tenure": 28,
+            "tabu_patience": 956
+          }
+        ]
+      ],
+      111.99986177548898
+    ],
+    [
+      [
+        [
+          "gd",
+          {
+            "gd_iters": 5000
+          }
+        ],
+        [
+          "vns",
+          {
+            "vns_iters": 41117,
+            "vns_budget": 62
+          }
+        ],
+        [
+          "tabu",
+          {
+            "tabu_iters": 3162,
+            "tabu_tenure": 28,
+            "tabu_patience": 956
+          }
+        ],
+        [
+          "gd",
+          {
+            "gd_iters": 5000
+          }
+        ],
+        [
+          "alns",
+          {
+            "alns_iters": 14341
+          }
+        ]
+      ],
+      3.309113939248423
+    ]
+  ],
+  "best_chain": [
+    [
+      "alns",
+      {
+        "alns_iters": 1500
+      }
+    ],
+    [
+      "kempe",
+      {
+        "kempe_iters": 10000
+      }
+    ],
+    [
+      "tabu",
+      {
+        "tabu_iters": 2000,
+        "tabu_tenure": 20,
+        "tabu_patience": 500
+      }
+    ]
+  ],
+  "best_chain_score": 0.9281910563707739,
+  "best_overall_score": 0.971695692393001,
+  "best_overall_config": [
+    "chain",
+    [
+      [
+        "alns",
+        {
+          "alns_iters": 1500
+        }
+      ],
+      [
+        "kempe",
+        {
+          "kempe_iters": 10000
+        }
+      ],
+      [
+        "tabu",
+        {
+          "tabu_iters": 2000,
+          "tabu_tenure": 20,
+          "tabu_patience": 500
+        }
+      ]
+    ]
+  ],
+  "core_algos": [
+    "tabu",
+    "alns",
+    "kempe",
+    "vns"
+  ],
+  "timestamp": "2026-04-17T19:50:39.764311"
+}

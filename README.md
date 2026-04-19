@@ -9,10 +9,10 @@
 </p>
 
 <p align="center">
-  <img src="graphs/algo_bars.png" width="860"/>
+  <img src="graphs/fig2_family_heatmap.png" width="860"/>
 </p>
 
-<p align="center"><sub>Soft penalty, runtime, and peak memory — mean with error bars across all 8 datasets.</sub></p>
+<p align="center"><sub>Normalized soft penalty across 8 ITC 2007 sets, grouped by algorithm family. Red box marks the row winner.</sub></p>
 
 ---
 
@@ -41,12 +41,23 @@ Thirteen algorithms are implemented in a single C++20 solver, with a Python brid
 
 ## Quick start
 
+**Linux / macOS**
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 make                                            # build the C++ solver
 python3 main.py --dataset instances/exam_comp_set4.exam
 ```
+
+**Windows (PowerShell)**
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1                    # cmd.exe: .\.venv\Scripts\activate.bat
+pip install -r requirements.txt
+mingw32-make                                    # see "Building on Windows" if make is missing
+python main.py --dataset instances\exam_comp_set4.exam
+```
+
 <p align="center"><sub>Full guide is below in the Usage and CLI Reference.</sub></p>
 That runs every algorithm on set4 (273 exams — small and fast) and drops output into a new batch under `results/`. For interactive tinkering, open `exam_scheduling.ipynb`.
 
@@ -73,10 +84,10 @@ That runs every algorithm on set4 (273 exams — small and fast) and drops outpu
 All algorithms run through one C++ binary. Python fallbacks exist for algorithms 1-8 when the binary is unavailable.
 
 <p align="center">
-  <img src="graphs/algo_radar.png" width="560"/>
+  <img src="graphs/fig5_sensitivity.png" width="560"/>
 </p>
 
-<p align="center"><sub>Performance profile — memory, runtime, soft penalty, and individual constraint components. Smaller area is better.</sub></p>
+<p align="center"><sub>Per-algorithm parameter sensitivity fingerprint. Red box = top-1 most sensitive knob for that algorithm.</sub></p>
 
 ### What makes them fast
 
@@ -105,17 +116,14 @@ All sourced from the [ITC 2007 Examination Track](https://www.eeecs.qub.ac.uk/it
 ## Results
 
 <p align="center">
-  <img src="graphs/algo_heatmap.png" width="860"/>
+  <img src="graphs/fig2_family_heatmap.png" width="860"/>
 </p>
 
-<p align="center"><sub>Cross-dataset soft penalty heatmap. Rows are algorithms, columns are datasets sorted by size. Cell values are actual soft penalties; color encodes relative standing (green = best, red = worst).</sub></p>
+<p align="center"><sub>Family dominance per ITC 2007 instance. Cells are normalized soft penalty (= soft / best on that instance); red box marks the winning family per row.</sub></p>
 
 <br/>
 
-GVNS and Kempe hold up across the board. The tightly-constrained sets (set3, set5, set7) punish anything that can't reason carefully about room capacity — GD and ALNS struggle there while the others stay relatively stable.
-
-> [!TIP]
-> Cluttered plots (Pareto, line-across-datasets, runtime scaling, convergence) also have a `by_family=True` variant that splits the 13 algorithms into a 2×2 grid by search paradigm — Construction / Trajectory / Population / Exact-Hybrid. Those faceted files land in `graphs/*_by_family.png` when you run `make reproduce`.
+Trajectory methods (Tabu, SA, GD, LAHC, Kempe) take the row winner on every instance once families are aggregated to their best member. Construction (Greedy/DSatur) lands within a few percent on small sets but blows up on the dense ones. Population methods lag on the tightly-constrained sets (set3, set5, set7) where room-capacity reasoning matters. The discovered champion chain `alns -> kempe -> tabu` is the warm-start that most Trajectory winners actually run inside (see fig 3).
 
 <br/>
 
@@ -123,38 +131,94 @@ GVNS and Kempe hold up across the board. The tightly-constrained sets (set3, set
 <tr>
 <td width="50%">
 <p align="center">
-  <img src="graphs/algo_scatter.png" width="100%"/>
+  <img src="graphs/fig1_pareto.png" width="100%"/>
 </p>
-<p align="center"><sub>Quality vs runtime trade-off. Bottom-left is the sweet spot — fast and low penalty.</sub></p>
+<p align="center"><sub>Pareto frontier (quality vs runtime, synthetic n=1000) colored by family. Bottom-left dominates.</sub></p>
 </td>
 <td width="50%">
 <p align="center">
-  <img src="graphs/algo_boxes.png" width="100%"/>
+  <img src="graphs/fig6_ip_vs_heuristic.png" width="100%"/>
 </p>
-<p align="center"><sub>Soft penalty distribution across datasets. Tight boxes mean consistent performance.</sub></p>
+<p align="center"><sub>CP-SAT IP optimum vs best heuristic on the 5 solved instances, with per-component soft breakdown and gap%.</sub></p>
 </td>
 </tr>
 </table>
 
 <br/>
 
-### Per-dataset breakdown
+### vs CP-SAT IP optimum
 
+<table>
+<tr>
+<td width="50%">
 <p align="center">
-  <img src="graphs/summary_lines.png" width="860"/>
+  <img src="graphs/fig7_gap_heatmap.png" width="100%"/>
 </p>
-
-<p align="center"><sub>Soft penalty, runtime, and peak memory traced across all eight datasets per algorithm.</sub></p>
+<p align="center"><sub>Gap-to-IP heatmap: rows = algorithms (sorted by mean gap), columns = 4 solved instances (set8 excluded — evaluator-scale mismatch), cell = (algo_soft / ip_soft - 1) * 100%.</sub></p>
+</td>
+<td width="50%">
+<p align="center">
+  <img src="graphs/fig8_gap_leaderboard.png" width="100%"/>
+</p>
+<p align="center"><sub>Leaderboard vs IP: mean gap to CP-SAT optimum across 4 solved instances (set8 excluded) with std error bars, colored by family.</sub></p>
+</td>
+</tr>
+</table>
 
 <br/>
 
 ### Scalability
 
 <p align="center">
-  <img src="graphs/scan_smoke.png" width="780"/>
+  <img src="graphs/fig4_scaling.png" width="860"/>
 </p>
 
-<p align="center"><sub>Chain(SA, Kempe, GD) on synthetic instances from 25 to 200 exams. Quality on the left, runtime and peak memory on the right.</sub></p>
+<p align="center"><sub>Runtime (log-log, left) and soft penalty (right) vs problem size, grouped by algorithm family on synthetic instances.</sub></p>
+
+<br/>
+
+### Sensitivity
+
+<p align="center">
+  <img src="graphs/fig5_sensitivity.png" width="780"/>
+</p>
+
+<p align="center"><sub>Parameter sensitivity fingerprint. Left: iters sensitivity per algorithm (universal sweep param). Right: non-iters params (pop, list, patience, tenure, budget) only where actually swept. Sensitivity = (max - min) / mean of soft penalty. Red box marks the top-1 non-iter param per algorithm.</sub></p>
+
+<br/>
+
+### Chain methodology
+
+<p align="center">
+  <img src="graphs/fig3_chain_methodology.png" width="860"/>
+</p>
+
+<p align="center"><sub>Chain-finder: Successive Halving ladder + prefix cache + 1-point crossover on the left; top-5 discovered chains on the right.</sub></p>
+
+<br/>
+
+### Research figures
+
+All paper-grade outputs live under `graphs/`:
+
+| File | Content |
+|------|---------|
+| `fig1_pareto.png` | Hero: Pareto frontier (quality vs runtime, n=1000 synthetic) colored by algorithm family |
+| `fig2_family_heatmap.png` | Family dominance per ITC 2007 instance |
+| `fig3_chain_methodology.png` | Chain-finder schematic + champion discovery trajectory |
+| `fig4_scaling.png` | Runtime and soft penalty vs problem size, by family |
+| `fig5_sensitivity.png` | Parameter sensitivity fingerprint: iters bars (10 algos) + non-iters heatmap |
+| `fig6_ip_vs_heuristic.png` | CP-SAT IP vs best heuristic, 5 instances that solved |
+| `fig7_gap_heatmap.png` | Gap to CP-SAT IP optimum per algorithm and instance |
+| `fig8_gap_leaderboard.png` | Leaderboard: mean gap to IP with std across 5 solved instances |
+
+Tables are in `graphs/tables/` as both CSV (notebook/markdown) and LaTeX (paper).
+
+Regenerate with:
+
+```bash
+python3 results/batch_018_colab/make_paper_figures.py
+```
 
 ---
 
@@ -195,41 +259,70 @@ python3 main.py --rollback-params 2        # restore version 2 from log
 
 ### Prerequisites
 
-- C++ compiler with C++20 support (g++ recommended)
+- C++ compiler with C++20 support (g++ recommended; on Windows use WSL2 or MinGW-w64 via MSYS2)
+- GNU Make (Linux/macOS native; Windows: `mingw32-make` from MSYS2, or Make inside WSL2)
 - Python 3.10+
 - pip packages: see `requirements.txt`
 
 ### Setup
 
+**Linux / macOS**
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 make
 ```
 
+**Windows (PowerShell)**
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+mingw32-make                                    # MSYS2/MinGW; or skip and use Python fallbacks
+```
+
+<details>
+<summary>Building on Windows (g++ / make)</summary>
+<br/>
+
+The C++ solver uses C++20 + `-march=native -flto`. The path of least resistance:
+
+- **WSL2** (recommended) — install Ubuntu, then follow the Linux instructions verbatim. Best performance, full Make support.
+- **MSYS2 / MinGW-w64** — install [msys2.org](https://www.msys2.org/), then in the MSYS2 UCRT64 shell run `pacman -S mingw-w64-ucrt-x86_64-gcc make`. Build with `mingw32-make` from PowerShell, or `make` from inside the MSYS2 shell.
+- **Skip the C++ build** — algorithms 1–8 have Python fallbacks in `algorithms/`. They're slower (~10–50×) but require no compiler. The notebook and most plotting works fine without the binary.
+
+If you go the MSYS2 route, ensure `C:\msys64\ucrt64\bin` is on `PATH` so `g++.exe` resolves.
+
+</details>
+
 ### CLI examples
 
+**Linux / macOS**
 ```bash
-# Single algorithm
 python3 main.py --dataset instances/exam_comp_set4.exam --algo sa
-
-# Multiple algorithms
 python3 main.py --dataset instances/exam_comp_set4.exam --algo sa,gd,vns
-
-# Custom parameters
 python3 main.py --dataset instances/exam_comp_set1.exam --sa-iters 10000 --seed 123
-
-# Auto-tune across all datasets
 python3 main.py --mode tune
-
-# View active tuned parameters
 python3 main.py --show-params
+```
+
+**Windows (PowerShell)**
+```powershell
+python main.py --dataset instances\exam_comp_set4.exam --algo sa
+python main.py --dataset instances\exam_comp_set4.exam --algo sa,gd,vns
+python main.py --dataset instances\exam_comp_set1.exam --sa-iters 10000 --seed 123
+python main.py --mode tune
+python main.py --show-params
 ```
 
 ### Direct C++ usage
 
 ```bash
+# Linux / macOS
 ./cpp/build/exam_solver instances/exam_comp_set4.exam --algo all -v
+
+# Windows (PowerShell)
+.\cpp\build\exam_solver.exe instances\exam_comp_set4.exam --algo all -v
 ```
 
 <details>
@@ -304,7 +397,6 @@ exam-scheduling/
 ├── tooling/
 │   ├── tuned_params.py       # single source of truth for defaults
 │   ├── tuned_params.json
-│   ├── regen_figures.py      # rebuild every figure from a saved batch
 │   ├── tuning_export.py      # sensitivity grid export
 │   ├── param_sweep.py        # 1-D sensitivity sweep (drives Colab sweep cell)
 │   └── tuner/                # auto-tuner split into a package

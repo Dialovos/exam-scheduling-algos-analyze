@@ -1,0 +1,11 @@
+{
+  "HHO+": {
+    "two_in_a_row": 281550,
+    "two_in_a_day": 0,
+    "period_spread": 30240,
+    "non_mixed_durations": 2975,
+    "front_load": 180,
+    "period_penalty": 174,
+    "room_penalty": 2750
+  }
+}

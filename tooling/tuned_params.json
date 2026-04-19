@@ -1,17 +1,17 @@
 {
   "version": 2,
-  "timestamp": "2026-04-16T00:00:00.000000",
+  "timestamp": "2026-04-17T19:50:39.770336",
   "params": {
     "tabu": {
-      "tabu_iters": 2000,
-      "tabu_tenure": 20,
-      "tabu_patience": 500
+      "tabu_iters": 3162,
+      "tabu_tenure": 28,
+      "tabu_patience": 956
     },
     "sa": {
       "sa_iters": 5000
     },
     "kempe": {
-      "kempe_iters": 10000
+      "kempe_iters": 16284
     },
     "alns": {
       "alns_iters": 1500
@@ -43,7 +43,7 @@
       "vns_budget": 0
     }
   },
-  "aggregate_score": 3.2968434202136634,
+  "aggregate_score": 0.971695692393001,
   "per_dataset_scores": {
     "exam_comp_set1": 11150.0,
     "exam_comp_set2": 3377.0,
@@ -56,5 +56,29 @@
     "synthetic_tuner": 259.0
   },
   "trial_count": 129,
-  "source": "manual_calibration"
+  "source": "partial_adopt_colab",
+  "best_chain": [
+    [
+      "alns",
+      {
+        "alns_iters": 1500
+      }
+    ],
+    [
+      "kempe",
+      {
+        "kempe_iters": 10000
+      }
+    ],
+    [
+      "tabu",
+      {
+        "tabu_iters": 2000,
+        "tabu_tenure": 20,
+        "tabu_patience": 500
+      }
+    ]
+  ],
+  "best_chain_score": 0.9281910563707739,
+  "notes": "adopted new kempe + tabu from Colab tune; kept old alns + vns (runtime cost outweighed quality gain per A/B test)"
 }

@@ -1,0 +1,103 @@
+{
+  "datasets": [
+    "exam_comp_set1",
+    "exam_comp_set2",
+    "exam_comp_set3",
+    "exam_comp_set4",
+    "exam_comp_set5",
+    "exam_comp_set6",
+    "exam_comp_set7",
+    "exam_comp_set8"
+  ],
+  "total_trials": 173,
+  "elapsed_seconds": 7771.291467189789,
+  "scoring": "normalized_geometric_mean",
+  "best_score": 0.971695692393001,
+  "best_config": [
+    "chain",
+    [
+      [
+        "alns",
+        {
+          "alns_iters": 1500
+        }
+      ],
+      [
+        "kempe",
+        {
+          "kempe_iters": 10000
+        }
+      ],
+      [
+        "tabu",
+        {
+          "tabu_iters": 2000,
+          "tabu_tenure": 20,
+          "tabu_patience": 500
+        }
+      ]
+    ]
+  ],
+  "best_params_per_algo": {
+    "tabu": {
+      "tabu_iters": 3162,
+      "tabu_tenure": 28,
+      "tabu_patience": 956
+    },
+    "sa": {
+      "sa_iters": 5000
+    },
+    "kempe": {
+      "kempe_iters": 16284
+    },
+    "alns": {
+      "alns_iters": 14341
+    },
+    "gd": {
+      "gd_iters": 5000
+    },
+    "abc": {
+      "abc_pop": 30,
+      "abc_iters": 3000
+    },
+    "ga": {
+      "ga_pop": 30,
+      "ga_iters": 400
+    },
+    "lahc": {
+      "lahc_iters": 5000,
+      "lahc_list": 0
+    },
+    "woa": {
+      "woa_pop": 25,
+      "woa_iters": 3000
+    },
+    "vns": {
+      "vns_iters": 41117,
+      "vns_budget": 62
+    }
+  },
+  "best_scores_per_algo": {
+    "tabu": 1.0042183479988414,
+    "sa": 2.112947278147079,
+    "kempe": 1.1132341048909165,
+    "alns": 1.9476641011415112,
+    "gd": 11.451489451746394,
+    "abc": 1.2715070856551303,
+    "ga": 1.987721511486614,
+    "lahc": 1.5607235377575583,
+    "woa": 1.4601713544652655,
+    "vns": 0.9426918417372451
+  },
+  "baselines": {
+    "exam_comp_set1": 8373.0,
+    "exam_comp_set2": 2076.0,
+    "exam_comp_set3": 22745.0,
+    "exam_comp_set4": 20042.0,
+    "exam_comp_set5": 4922.0,
+    "exam_comp_set6": 29650.0,
+    "exam_comp_set7": 8138.0,
+    "exam_comp_set8": 12861.0
+  },
+  "timestamp": "2026-04-17T19:50:39.769288"
+}

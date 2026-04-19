@@ -1,0 +1,11 @@
+{
+  "Kempe Chain": {
+    "two_in_a_row": 10701,
+    "two_in_a_day": 3015,
+    "period_spread": 3078,
+    "non_mixed_durations": 150,
+    "front_load": 15,
+    "period_penalty": 500,
+    "room_penalty": 0
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "WOA": {
+    "two_in_a_row": 4968,
+    "two_in_a_day": 1850,
+    "period_spread": 2598,
+    "non_mixed_durations": 750,
+    "front_load": 115,
+    "period_penalty": 3350,
+    "room_penalty": 0
+  }
+}

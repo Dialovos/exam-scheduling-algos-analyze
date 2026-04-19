@@ -8,19 +8,19 @@ Modes:
 
 Directory layout:
   results/
-    batch_001_baseline/
-    batch_002_20260405_153022/
-    batch_003_tuning_sa/
+    batch_018_colab/
+    batch_019_<timestamp>/
+    batch_020_tuning_sa/
     ...
 
 Each batch dir contains: run_log.jsonl, plots, solution files, etc.
 
 Usage:
     bm = BatchManager()
-    bm.new_batch()                # auto: batch_002_<timestamp>
-    bm.new_batch("tuning_sa")    # manual: batch_003_tuning_sa
+    bm.new_batch()                # auto: batch_<id>_<timestamp>
+    bm.new_batch("tuning_sa")    # manual: batch_<id>_tuning_sa
     bm.list_batches()            # [{id, name, path, created, records}, ...]
-    bm.load_batch("batch_001")   # switch to existing batch
+    bm.load_batch("batch_018")   # switch to existing batch
     bm.active_dir                # current batch path
     bm.logger                    # ResultsLogger pointed at active batch
 """
