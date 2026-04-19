@@ -167,6 +167,19 @@ Trajectory methods (Tabu, SA, GD, LAHC, Kempe) take the row winner on every inst
 
 <br/>
 
+#### CP-SAT scaling cliff (RQ 4)
+
+CP-SAT (OR-Tools, branch-and-bound on the full ILP, 2 h wall-clock budget) shows a hard reliability boundary, not a gradual degradation:
+
+| Status (2 h cap) | Instances | Exam count |
+|------------------|-----------|------------|
+| Solved (optimum returned) | set6, set4, set8, set1, set2 | 242 – 870 |
+| Timed out (no incumbent reported) | set3, set5, set7 | 934 – 1096 |
+
+Every instance with ≤ 870 exams completes; every instance with ≥ 934 exams fails — so the practical ceiling sits in the ~900-exam band. The failure mode in our runs is timeout rather than memory: CP-SAT continues searching but cannot prove optimality before the budget elapses, and our pipeline only records the final optimum (so the empty `soft_breakdown.json` for sets 3, 5, 7 reflects "no proven optimum" rather than a crash). Heuristics, by contrast, return a feasible solution on every instance — fig 8 shows their gap to IP on the solvable subset, but the cliff above is what makes them *necessary* on the upper half of ITC 2007.
+
+<br/>
+
 ### Scalability
 
 <p align="center">
@@ -431,13 +444,15 @@ exam-scheduling/
 ## Research questions
 
 1. How does each algorithm's runtime scale with input size across synthetic
-   instances from 50 to 1200 exams?
+   instances from 50 to 1000 exams?
 2. Where does each algorithm sit on the quality-vs-runtime Pareto frontier
    when all 13 run on the same dataset?
 3. How sensitive is each tunable algorithm to its parameters? A 2-D
    grid sweep + 1-D degrade plot answers this per-knob.
 4. How does the exact CP-SAT solver's memory and reliability degrade as
-   input size grows?
+   input size grows? *(See "CP-SAT scaling cliff" under Results — the
+   ITC 2007 batch shows a hard reliability boundary near 900 exams,
+   not a gradual degradation.)*
 
 ## Reproducing the paper
 
