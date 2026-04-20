@@ -17,7 +17,6 @@
 ---
 
 ## Table of Contents
-- [Abstract](#abstract)
 - [Quick Start](#quick-start)
 - [Algorithms](#algorithms)
 - [Datasets](#datasets)
