@@ -28,6 +28,109 @@
 - [GenAI Usage Disclosure](#genai-usage-disclosure)
 - [References](#references)
 
+<details>
+<summary>Full flag reference</summary>
+<br/>
+
+| Flag | Description |
+|------|-------------|
+| `--dataset FILE` | ITC 2007 `.exam` file |
+| `--algo NAME` | `greedy`, `tabu`, `kempe`, `sa`, `alns`, `gd`, `abc`, `ga`, `lahc`, `woa`, `hho`, `cpsat`, `vns` |
+| `--mode MODE` | `demo` (default), `plot`, `batches`, `tune` |
+| `--size N` | Exam count for synthetic demo mode |
+| `--seed N` | Random seed (default: 42) |
+| `--tabu-iters` | Tabu iterations |
+| `--sa-iters` | SA iterations |
+| `--kempe-iters` | Kempe iterations |
+| `--alns-iters` | ALNS iterations |
+| `--gd-iters` | Great Deluge iterations |
+| `--abc-pop` / `--abc-iters` | ABC colony size / iterations |
+| `--ga-pop` / `--ga-iters` | GA population / generations |
+| `--lahc-iters` / `--lahc-list` | LAHC iterations / history list length (0 = auto) |
+| `--woa-pop` / `--woa-iters` | WOA population / iterations |
+| `--hho-pop` / `--hho-iters` | HHO+ hawk population / iterations |
+| `--cpsat-time` | CP-SAT time limit in seconds |
+| `--vns-iters` / `--vns-budget` | GVNS iterations / scan budget per LS call (0 = auto) |
+| `--show-params` | Print active param defaults and exit |
+| `--rollback-params V` | Rollback tuned params to version V and exit |
+
+</details>
+
+<details>
+<summary>Project structure</summary>
+<br/>
+
+```
+exam-scheduling/
+├── README.md
+├── Makefile
+├── requirements.txt
+├── main.py
+├── exam_scheduling.ipynb
+├── colab_runner.ipynb       # full batch on a Colab VM
+│
+├── core/
+│   ├── models.py
+│   ├── parser.py
+│   ├── generator.py
+│   ├── fast_eval.py
+│   └── evaluator.py
+│
+├── algorithms/
+│   ├── cpp_bridge.py        # subprocess bridge to the C++ binary
+│   ├── ip_solver.py
+│   ├── greedy.py
+│   ├── tabu_search.py
+│   ├── kempe_chain.py
+│   ├── simulated_annealing.py
+│   ├── alns.py
+│   ├── great_deluge.py
+│   ├── abc.py
+│   └── ga.py                # Python fallbacks; LAHC/WOA/HHO+/CP-SAT/GVNS are C++-only
+│
+├── cpp/
+│   └── src/
+│       ├── main.cpp
+│       ├── models.h, parser.h, evaluator.h
+│       ├── seeder.h, repair.h, neighbourhoods.h, greedy.h
+│       ├── tabu.h, kempe.h, sa.h, alns.h, gd.h
+│       ├── abc.h, ga.h, lahc.h, woa.h, hho.h
+│       └── cpsat.h, vns.h
+│
+├── tooling/
+│   ├── tuned_params.py       # single source of truth for defaults
+│   ├── tuned_params.json
+│   ├── tuning_export.py      # sensitivity grid export
+│   ├── param_sweep.py        # 1-D sensitivity sweep (drives Colab sweep cell)
+│   └── tuner/                # auto-tuner split into a package
+│       ├── core.py, cli.py, eval.py
+│       ├── sampling.py, search_spaces.py
+│       ├── binary.py, synthetic.py, checkpoint.py
+│
+├── utils/
+│   ├── batch_manager.py
+│   ├── results_logger.py
+│   ├── plotting.py           # thin shim re-exporting from plots/
+│   └── plots/                # figure generators (split by topic)
+│       ├── shared.py         # ALGO_FAMILY taxonomy, style helpers
+│       ├── comparative.py    # bars, boxes, radar, heatmap, Pareto
+│       ├── convergence.py    # line/scatter/scaling (with by_family facets)
+│       ├── breakdown.py      # soft-constraint stacks
+│       └── tuning.py         # sensitivity + trial trajectories
+│
+├── notebooks/
+│   └── COLAB_RUNBOOK.md      # step-by-step "don't mess up your laptop" guide
+│
+├── instances/
+├── results/
+├── graphs/
+├── report/
+├── references/
+└── tests/
+```
+
+</details>
+
 ---
 
 ## Problem and Approach
@@ -346,109 +449,6 @@ python main.py --show-params
 .\cpp\build\exam_solver.exe instances\exam_comp_set4.exam --algo all -v
 ```
 
-<details>
-<summary>Full flag reference</summary>
-<br/>
-
-| Flag | Description |
-|------|-------------|
-| `--dataset FILE` | ITC 2007 `.exam` file |
-| `--algo NAME` | `greedy`, `tabu`, `kempe`, `sa`, `alns`, `gd`, `abc`, `ga`, `lahc`, `woa`, `hho`, `cpsat`, `vns` |
-| `--mode MODE` | `demo` (default), `plot`, `batches`, `tune` |
-| `--size N` | Exam count for synthetic demo mode |
-| `--seed N` | Random seed (default: 42) |
-| `--tabu-iters` | Tabu iterations |
-| `--sa-iters` | SA iterations |
-| `--kempe-iters` | Kempe iterations |
-| `--alns-iters` | ALNS iterations |
-| `--gd-iters` | Great Deluge iterations |
-| `--abc-pop` / `--abc-iters` | ABC colony size / iterations |
-| `--ga-pop` / `--ga-iters` | GA population / generations |
-| `--lahc-iters` / `--lahc-list` | LAHC iterations / history list length (0 = auto) |
-| `--woa-pop` / `--woa-iters` | WOA population / iterations |
-| `--hho-pop` / `--hho-iters` | HHO+ hawk population / iterations |
-| `--cpsat-time` | CP-SAT time limit in seconds |
-| `--vns-iters` / `--vns-budget` | GVNS iterations / scan budget per LS call (0 = auto) |
-| `--show-params` | Print active param defaults and exit |
-| `--rollback-params V` | Rollback tuned params to version V and exit |
-
-</details>
-
-<details>
-<summary>Project structure</summary>
-<br/>
-
-```
-exam-scheduling/
-├── README.md
-├── Makefile
-├── requirements.txt
-├── main.py
-├── exam_scheduling.ipynb
-├── colab_runner.ipynb       # full batch on a Colab VM
-│
-├── core/
-│   ├── models.py
-│   ├── parser.py
-│   ├── generator.py
-│   ├── fast_eval.py
-│   └── evaluator.py
-│
-├── algorithms/
-│   ├── cpp_bridge.py        # subprocess bridge to the C++ binary
-│   ├── ip_solver.py
-│   ├── greedy.py
-│   ├── tabu_search.py
-│   ├── kempe_chain.py
-│   ├── simulated_annealing.py
-│   ├── alns.py
-│   ├── great_deluge.py
-│   ├── abc.py
-│   └── ga.py                # Python fallbacks; LAHC/WOA/HHO+/CP-SAT/GVNS are C++-only
-│
-├── cpp/
-│   └── src/
-│       ├── main.cpp
-│       ├── models.h, parser.h, evaluator.h
-│       ├── seeder.h, repair.h, neighbourhoods.h, greedy.h
-│       ├── tabu.h, kempe.h, sa.h, alns.h, gd.h
-│       ├── abc.h, ga.h, lahc.h, woa.h, hho.h
-│       └── cpsat.h, vns.h
-│
-├── tooling/
-│   ├── tuned_params.py       # single source of truth for defaults
-│   ├── tuned_params.json
-│   ├── tuning_export.py      # sensitivity grid export
-│   ├── param_sweep.py        # 1-D sensitivity sweep (drives Colab sweep cell)
-│   └── tuner/                # auto-tuner split into a package
-│       ├── core.py, cli.py, eval.py
-│       ├── sampling.py, search_spaces.py
-│       ├── binary.py, synthetic.py, checkpoint.py
-│
-├── utils/
-│   ├── batch_manager.py
-│   ├── results_logger.py
-│   ├── plotting.py           # thin shim re-exporting from plots/
-│   └── plots/                # figure generators (split by topic)
-│       ├── shared.py         # ALGO_FAMILY taxonomy, style helpers
-│       ├── comparative.py    # bars, boxes, radar, heatmap, Pareto
-│       ├── convergence.py    # line/scatter/scaling (with by_family facets)
-│       ├── breakdown.py      # soft-constraint stacks
-│       └── tuning.py         # sensitivity + trial trajectories
-│
-├── notebooks/
-│   └── COLAB_RUNBOOK.md      # step-by-step "don't mess up your laptop" guide
-│
-├── instances/
-├── results/
-├── graphs/
-├── report/
-├── references/
-└── tests/
-```
-
-</details>
-
 ## Research questions
 
 1. How does each algorithm's runtime scale with input size across synthetic
@@ -477,7 +477,7 @@ exam-scheduling/
 
 ## GenAI usage disclosure
 
-AI-assisted coding was used throughout development for algorithm implementation, debugging, and code refactoring.
+AI-assisted coding (claude and ChatGPT) was used throughout development for algorithm implementation, debugging, and code refactoring.
 
 ## References
 
