@@ -3,9 +3,9 @@
 The tuner used to be a single 1421-line file. These tests guarantee the
 split preserved every name the legacy callers depend on:
 
-    * main.py               → AutoTuner
-    * tooling.optimizers    → SEARCH_SPACES
-    * exam_scheduling.ipynb → auto_tuner module object
+    * main.py                         → AutoTuner
+    * tooling.optimizers              → SEARCH_SPACES
+    * notebooks/exam_scheduling.ipynb → auto_tuner module object
 
 If any of those break, the tuner is unusable and the paper pipeline
 silently regresses — cheap insurance for a one-time-per-decade refactor.
