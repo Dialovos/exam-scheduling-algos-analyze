@@ -66,8 +66,6 @@ exam-scheduling/
 ├── Makefile
 ├── requirements.txt
 ├── main.py
-├── exam_scheduling.ipynb
-├── colab_runner.ipynb       # full batch on a Colab VM
 │
 ├── core/
 │   ├── models.py
@@ -119,6 +117,8 @@ exam-scheduling/
 │       └── tuning.py         # sensitivity + trial trajectories
 │
 ├── notebooks/
+│   ├── exam_scheduling.ipynb # interactive exploration notebook
+│   ├── colab_runner.ipynb    # full batch on a Colab VM
 │   └── COLAB_RUNBOOK.md      # step-by-step "don't mess up your laptop" guide
 │
 ├── instances/
@@ -161,7 +161,7 @@ python main.py --dataset instances\exam_comp_set4.exam
 ```
 
 <p align="center"><sub>Full guide is below in the Usage and CLI Reference.</sub></p>
-That runs every algorithm on set4 (273 exams — small and fast) and drops output into a new batch under `results/`. For interactive tinkering, open `exam_scheduling.ipynb`.
+That runs every algorithm on set4 (273 exams — small and fast) and drops output into a new batch under `results/`. For interactive tinkering, open `notebooks/exam_scheduling.ipynb`.
 
 ---
 
@@ -468,7 +468,7 @@ python main.py --show-params
   on set1, and regenerates `graphs/` from the cached batch.
 - Full benchmark (Colab recommended): follow
   [`notebooks/COLAB_RUNBOOK.md`](notebooks/COLAB_RUNBOOK.md) — it walks
-  through [`colab_runner.ipynb`](colab_runner.ipynb)
+  through [`notebooks/colab_runner.ipynb`](notebooks/colab_runner.ipynb)
   end-to-end, including the post-run step that unzips the batch locally
   and replays `make reproduce` to regenerate figures.
 - CI: every push runs `.github/workflows/reproduce.yml` — compiles the

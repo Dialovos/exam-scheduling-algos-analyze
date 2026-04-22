@@ -1,4 +1,4 @@
-# Colab Runbook — `colab_runner.ipynb`
+# Colab Runbook — `notebooks/colab_runner.ipynb`
 
 Short, opinionated guide to running the full paper batch on Google Colab without
 breaking your local checkout. Follow it top-to-bottom the first time; afterwards
@@ -8,7 +8,7 @@ you only need step 3–6.
 
 ## TL;DR
 
-1. Open https://colab.research.google.com/github/Dialovos/exam-scheduling-algos-analyze/blob/master/colab_runner.ipynb
+1. Open https://colab.research.google.com/github/Dialovos/exam-scheduling-algos-analyze/blob/master/notebooks/colab_runner.ipynb
 2. Runtime → **Change runtime type** → pick one of:
    - **A100** (recommended): ~12 vCPUs, 83 GB RAM — roughly 10× faster than free tier.
    - **T4 High-RAM**: ~4 vCPUs, 25 GB — ~4× faster than free tier.
@@ -208,7 +208,6 @@ them directly.
 
 - **Don't** run Colab cells locally. They use `!apt-get install`, `%cd`,
   and `google.colab.files` — none of which exist on your laptop.
-- **Don't** edit `exam_scheduling.ipynb` in Colab. That's your local
-  experiment notebook; the Colab sandbox gets `colab_runner.ipynb`.
-- **Don't** put secrets (API keys, tokens) into the notebook. Colab
-  notebooks are shareable by default and the repo is public.
+- **Don't** edit `notebooks/exam_scheduling.ipynb` in Colab. That's your local
+  experiment notebook; the Colab sandbox gets `notebooks/colab_runner.ipynb`.
+- **Don't** put secrets (API keys, tokens) into the notebook.
