@@ -289,7 +289,7 @@ The un-collapsed companion is `graphs/tables/t4_family_comparison.csv`: same dat
 <p align="center">
   <img src="graphs/fig8_gap_leaderboard.png" width="100%"/>
 </p>
-<p align="center"><sub>Leaderboard vs IP: mean gap to CP-SAT optimum across 4 solved instances (set8 excluded) with std error bars, colored by family.</sub></p>
+<p align="center"><sub>Leaderboard vs IP: mean gap to the proved CP-SAT optimum across 4 solved instances (set8 excluded). The baseline is the full-converged IP run (CP-SAT + Tabu warm-start, 2 h cap); the "CP-SAT (60s)" bar is a separate cold main-batch run with a 60 s per-seed budget, so the positive gap is a budget difference, not a solver defect. Bars colored by family, std error bars across instances.</sub></p>
 </td>
 </tr>
 </table>
@@ -352,7 +352,7 @@ All paper-grade outputs live under `graphs/`:
 | `fig5_sensitivity.png` | Parameter sensitivity fingerprint: iters bars (10 algos) + non-iters heatmap |
 | `fig6_ip_vs_heuristic.png` | CP-SAT IP vs best heuristic, 5 instances that solved |
 | `fig7_gap_heatmap.png` | Gap to CP-SAT IP optimum per algorithm and instance |
-| `fig8_gap_leaderboard.png` | Leaderboard: mean gap to IP with std across 5 solved instances |
+| `fig8_gap_leaderboard.png` | Leaderboard: mean gap to the proved CP-SAT IP optimum across 4 solved instances (set8 excluded). Baseline = IP run (warm-started, 2 h cap, proves optimum); "CP-SAT (60s)" bar = cold main-batch run with 60 s per-seed budget |
 
 Tables are in `graphs/tables/` as both CSV (notebook/markdown) and LaTeX (paper):
 

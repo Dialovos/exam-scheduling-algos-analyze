@@ -4,9 +4,24 @@ Horizontal bars, mean gap to CP-SAT IP optimum across 4 solved ITC
 instances. Error bar = std across instances. Bars colored by family.
 IP optimum marked at x = 0.
 
-``exam_comp_set8`` is excluded because the CP-SAT optimum on that instance
-(IP_soft = 25) does not share a common evaluator scale with the heuristic
-pipeline (heuristics score 12k+ there), so the ratio is not meaningful.
+Two compute budgets are in play and they are NOT the same solver run:
+
+* **Baseline (x = 0)**: the ``ip`` algorithm in ``colab_batch_ip/`` ---
+  CP-SAT with a Tabu warm-start hint (``--ip-warmstart``), a 2 h wall-clock
+  cap, and ``--ip-workers 0`` (all cores). On the 4 sets in this figure
+  (set1, set2, set4, set6) it proves optimum well under the 2 h cap. The
+  Tabu pre-compute time is not folded into the baseline cost; see
+  PROGRESS.md (2026-04-22 note) for the accounting caveat.
+
+* **"CP-SAT (60s)" bar**: the ``cpsat`` algorithm in the main batch,
+  cold (no warm-start), 60 s time budget per seed, 7 seeds per set. The
+  positive gap reflects the shorter budget and cold start --- not a defect
+  of the solver.
+
+``exam_comp_set8`` is excluded because the baseline optimum on that
+instance (IP_soft = 25) does not share a common evaluator scale with the
+heuristic pipeline (heuristics score 12k+ there), so the ratio is not
+meaningful.
 
 The x-axis is symlog so single-digit % gaps and 1000%+ failures are both
 visible on one chart.
@@ -89,7 +104,7 @@ def make_fig8(out_path):
                 fontsize=8, fontweight="bold")
 
     def _disambig(name):
-        return "CP-SAT (2h)" if algo_short(name) == "CP-SAT" else algo_short(name)
+        return "CP-SAT (60s)" if algo_short(name) == "CP-SAT" else algo_short(name)
 
     ax.set_yticks(y)
     ax.set_yticklabels([_disambig(a) for a in agg["algorithm"]])
@@ -98,14 +113,14 @@ def make_fig8(out_path):
 
     ax.set_xlabel("Mean gap to CP-SAT IP optimum (%, symlog)")
     ax.set_title("Leaderboard vs CP-SAT IP optimum\n"
-                 "(IP-optimum baseline = full-converged CP-SAT; "
-                 "'CP-SAT (2h)' = same solver truncated to the 2h budget. "
-                 "Set8 excluded - evaluator-scale mismatch)",
+                 "(Baseline = IP run: CP-SAT with Tabu warm-start, 2 h wall-clock cap, "
+                 "proved optimum on these 4 sets. 'CP-SAT (60s)' = cold CP-SAT in the "
+                 "main batch, 60 s per seed. Set8 excluded - evaluator-scale mismatch)",
                  fontweight="bold", fontsize=9.5)
 
     handles = [Patch(facecolor=FAMILY_COLORS[f], label=f) for f in FAMILY_ORDER]
     handles.append(plt.Line2D([], [], color="#2E7D32", linestyle="--",
-                              linewidth=2, label="CP-SAT IP optimum (baseline)"))
+                              linewidth=2, label="IP optimum (2h cap, proved)"))
     ax.legend(handles=handles, loc="upper left",
               bbox_to_anchor=(1.01, 1.0), borderaxespad=0.0,
               fontsize=9, framealpha=0.9)
