@@ -17,6 +17,7 @@
 ---
 
 ## Table of Contents
+- [Repository map](#repository-map)
 - [Quick Start](#quick-start)
 - [Algorithms](#algorithms)
 - [Datasets](#datasets)
@@ -27,6 +28,30 @@
 - [Reproducing the paper](#reproducing-the-paper)
 - [GenAI Usage Disclosure](#genai-usage-disclosure)
 - [References](#references)
+
+## Repository map
+
+A single Python entry point (`main.py`) dispatches to thirteen algorithms living under [`algorithms/`](algorithms/) (Python fallbacks) and [`cpp/src/`](cpp/src/) (the C++20 solver reached through a subprocess bridge). Shared ITC 2007 parsing, models, and O(k) delta-evaluator sit in [`core/`](core/). Batch orchestration, results logging, and the figure factory are in [`utils/`](utils/), with the auto-tuner and tuned-parameter store under [`tooling/`](tooling/). Interactive notebooks and the Colab runbook are in [`notebooks/`](notebooks/); datasets, cached batches, and paper-grade figures are in [`instances/`](instances/), [`results/`](results/), and [`graphs/`](graphs/). The written artefacts (research report, speech script, deck) live in [`report/`](report/) and [`slides/`](slides/), with annotated citations in [`references/`](references/).
+
+| Folder | What's inside |
+|--------|---------------|
+| [`algorithms/`](algorithms/) | Python implementations of 8 algorithms + the C++ subprocess bridge (`cpp_bridge.py`) and OR-Tools CP-SAT / PuLP IP solver (`ip_solver.py`). |
+| [`core/`](core/) | ITC 2007 parser, data models, synthetic instance generator, and the fast O(k) delta-evaluator (`fast_eval.py`, `evaluator.py`). |
+| [`cpp/src/`](cpp/src/) | C++20 solver — one binary, all 13 algorithms. Headers per algorithm (`tabu.h`, `sa.h`, `cpsat.h`, …) plus shared `seeder`/`repair`/`neighbourhoods`. |
+| [`tooling/`](tooling/) | Auto-tuner package (`tuner/`), tuned-param store with version history (`tuned_params.py`, `tuned_params.json`), parameter sweep and sensitivity export. |
+| [`utils/`](utils/) | Batch manager, results logger, and the `plots/` figure factory (comparative, convergence, breakdown, tuning). |
+| [`notebooks/`](notebooks/) | `exam_scheduling.ipynb` (local exploration), `colab_runner.ipynb` (full batch on a Colab VM), and [`COLAB_RUNBOOK.md`](notebooks/COLAB_RUNBOOK.md). |
+| [`instances/`](instances/) | The eight ITC 2007 Examination Track `.exam` files (set1 – set8). |
+| [`results/`](results/) | Per-batch outputs: `aggregated.csv`, raw solutions, per-algorithm logs. `batch_018_colab/` is the paper-grade batch. |
+| [`graphs/`](graphs/) | The eight paper figures (`fig1_pareto.png` … `fig8_gap_leaderboard.png`) plus `tables/` (CSV + LaTeX). |
+| [`report/`](report/) | Peer research report in arXiv-style flat prose (`peer_research_report.md` / `.pdf`). |
+| [`slides/`](slides/) | Deck generator (`build_deck.py`, `deck_*.py`), rendered `.pptx` / `.pdf`, and the 16-slide `speech_script.md` / `.pdf`. |
+| [`references/`](references/) | Annotated bibliography (`references.md`) — the full reading list behind the paper. |
+| [`tests/`](tests/) | Pytest suite — tuner import smoke test, evaluator invariants, CI-facing checks. |
+| [`.github/`](.github/workflows/) | `reproduce.yml` CI workflow: builds the binary, runs pytest, smoke-tests Tabu on set1. |
+| [`Makefile`](Makefile) | `make` builds the C++ solver; `make reproduce` runs the local smoke + replays figures. |
+| [`main.py`](main.py) | Single CLI entry point — dispatches by `--algo`, `--dataset`, `--mode`. |
+| [`PROGRESS.md`](PROGRESS.md) | Long-form dev log: decisions, failed experiments, open research items. |
 
 <details>
 <summary>Full flag reference</summary>
