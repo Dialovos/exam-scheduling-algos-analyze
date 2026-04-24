@@ -1,0 +1,22 @@
+[
+  {
+    "algorithm": "Tabu (Cached)",
+    "runtime": 3.304526,
+    "iterations": 2884,
+    "feasible": true,
+    "hard_violations": 0,
+    "soft_penalty": 12723,
+    "conflicts": 0,
+    "room_occupancy": 0,
+    "period_utilisation": 0,
+    "period_related": 0,
+    "room_related": 0,
+    "two_in_a_row": 0,
+    "two_in_a_day": 0,
+    "period_spread": 9261,
+    "non_mixed_durations": 2450,
+    "front_load": 430,
+    "period_penalty": 392,
+    "room_penalty": 190
+  }
+]

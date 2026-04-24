@@ -1,12 +1,37 @@
-pulp>=2.7
-matplotlib>=3.7
+# Core numerics / data
 numpy>=1.24
+pandas>=2.0
+
+# Plotting
+matplotlib>=3.7
+plotly>=5.18
+kaleido>=0.2,<1.0      # plotly static image export
+
+# IP / CP-SAT solver (algorithms/ip_solver.py)
 ortools>=9.8
+pulp>=2.7              # fallback when ortools is unavailable
+
+# Notebooks (exam_scheduling, colab_runner, batch19_colab, gpu_measurement_colab)
 jupyter>=1.0
 notebook>=7.0
 ipykernel>=6.25
-pandas>=2.0
-plotly>=5.18
-kaleido>=0.2,<1.0
+
+# Slide / deck generation (slides/build_deck.py and slides_*.py)
+python-pptx>=0.6.21
+lxml>=4.9
+
+# Tests
 pytest>=7.4
 pytest-timeout>=2.2
+
+# ─────────────────────────────────────────────────────────────────────────
+# System toolchains (NOT pip-installable — listed here for reference only)
+# ─────────────────────────────────────────────────────────────────────────
+#   g++ >= 11            C++20 solver build        apt install g++
+#   GNU make             build driver              apt install make
+#   CUDA toolkit >= 11.8 Phase-3 *_cuda variants   apt install nvidia-cuda-toolkit
+#     (needs nvcc + libcudart; build with `make HAVE_CUDA=1`. Without it,
+#     *_cuda algos fall back to CPU twins — tests still pass.)
+#   Verilator >= 5.0     HDL cosim for FPGA path   apt install verilator
+#     (Ubuntu 24.04 ships 5.x. Only needed for `make -f cpp/src/hdl/sim.mk`
+#     — see docs/FPGA_DESIGN.md.)

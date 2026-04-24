@@ -1,0 +1,22 @@
+[
+  {
+    "algorithm": "ALNS (Thompson)",
+    "runtime": 50.673790,
+    "iterations": 3000,
+    "feasible": true,
+    "hard_violations": 0,
+    "soft_penalty": 3037,
+    "conflicts": 0,
+    "room_occupancy": 0,
+    "period_utilisation": 0,
+    "period_related": 0,
+    "room_related": 0,
+    "two_in_a_row": 0,
+    "two_in_a_day": 150,
+    "period_spread": 2,
+    "non_mixed_durations": 2250,
+    "front_load": 635,
+    "period_penalty": 0,
+    "room_penalty": 0
+  }
+]
