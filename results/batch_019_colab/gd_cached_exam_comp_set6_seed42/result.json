@@ -1,0 +1,22 @@
+[
+  {
+    "algorithm": "Great Deluge (Cached)",
+    "runtime": 7.504891,
+    "iterations": 80000,
+    "feasible": true,
+    "hard_violations": 0,
+    "soft_penalty": 33545,
+    "conflicts": 0,
+    "room_occupancy": 0,
+    "period_utilisation": 0,
+    "period_related": 0,
+    "room_related": 0,
+    "two_in_a_row": 9480,
+    "two_in_a_day": 0,
+    "period_spread": 19900,
+    "non_mixed_durations": 1050,
+    "front_load": 375,
+    "period_penalty": 590,
+    "room_penalty": 2150
+  }
+]

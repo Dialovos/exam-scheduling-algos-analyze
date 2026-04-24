@@ -1,0 +1,22 @@
+[
+  {
+    "algorithm": "LAHC (Cached+nbhd)",
+    "runtime": 6.535093,
+    "iterations": 80000,
+    "feasible": true,
+    "hard_violations": 0,
+    "soft_penalty": 13449,
+    "conflicts": 0,
+    "room_occupancy": 0,
+    "period_utilisation": 0,
+    "period_related": 0,
+    "room_related": 0,
+    "two_in_a_row": 0,
+    "two_in_a_day": 0,
+    "period_spread": 10004,
+    "non_mixed_durations": 2500,
+    "front_load": 415,
+    "period_penalty": 380,
+    "room_penalty": 150
+  }
+]

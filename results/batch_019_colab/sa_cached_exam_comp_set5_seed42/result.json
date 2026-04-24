@@ -1,0 +1,22 @@
+[
+  {
+    "algorithm": "SA (Cached, direct-ops)",
+    "runtime": 4.464832,
+    "iterations": 80000,
+    "feasible": true,
+    "hard_violations": 0,
+    "soft_penalty": 5715,
+    "conflicts": 0,
+    "room_occupancy": 0,
+    "period_utilisation": 0,
+    "period_related": 0,
+    "room_related": 0,
+    "two_in_a_row": 80,
+    "two_in_a_day": 150,
+    "period_spread": 2475,
+    "non_mixed_durations": 0,
+    "front_load": 1610,
+    "period_penalty": 1400,
+    "room_penalty": 0
+  }
+]
