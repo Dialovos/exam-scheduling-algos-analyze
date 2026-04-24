@@ -1,0 +1,3 @@
+algo,instance,seed,feasible,hard,soft,runtime_sec,iterations
+vns_cached,exam_comp_set4,42,true,0,20042,8.762253342,5000
+vns_cached,exam_comp_set7,42,true,0,9955,7.580936047,5000

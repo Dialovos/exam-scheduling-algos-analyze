@@ -52,7 +52,8 @@ struct AliasTable {
         while (!sm.empty()) { int s = sm.back(); sm.pop_back(); prob[s] = 1.0; alias[s] = s; }
     }
 
-    int sample(std::mt19937& rng) const {
+    template <typename RngT>
+    int sample(RngT& rng) const {
         int i = std::uniform_int_distribution<int>(0, n - 1)(rng);
         return (std::uniform_real_distribution<double>(0.0, 1.0)(rng) < prob[i]) ? i : alias[i];
     }

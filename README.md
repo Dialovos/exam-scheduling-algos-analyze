@@ -29,6 +29,24 @@
 - [GenAI Usage Disclosure](#genai-usage-disclosure)
 - [References](#references)
 
+## Phase 2 — cached / Thompson algorithms (batch 19)
+
+Post-batch-18 performance work added new algorithm variants backed by an **incremental cached evaluator**, **Thompson-sampling AOS**, AVX2-SIMD move_delta, xoshiro256++ RNG, and multi-depth ejection chains. Measured speedups and trade-offs are in [`docs/PERF_ROADMAP.md`](docs/PERF_ROADMAP.md).
+
+**Two ways to run the batch-19 validation suite (identical outputs):**
+
+1. **Local** — `make batch19` runs all variants × 3 seeds × 8 ITC 2007 sets; writes `results/batch_019_validation/summary.csv` and per-run JSON. Requires `make all` first. Customize via env vars:
+   ```bash
+   make batch19 BATCH19_SEEDS="42 43 44 45 46" \
+                BATCH19_ALGOS="tabu_cached sa_cached alns_thompson" \
+                BATCH19_SETS="exam_comp_set4 exam_comp_set7"
+   python3 scripts/summarize_batch19.py results/batch_019_validation
+   ```
+
+2. **Colab** — open [`notebooks/batch19_colab.ipynb`](notebooks/batch19_colab.ipynb) (`Runtime → Run all`). Clones this repo, builds, runs the same `scripts/run_batch19.sh`, zips and downloads. Recommended: A100 High-RAM (~15 min) or T4 High-RAM (~30 min).
+
+**Microbenchmarks** (move_delta + portfolio + FPGA cycle-sim): `make bench-omp BENCH_INSTANCE=instances/exam_comp_setX.exam`. Everything runs on a fresh clone with no non-standard dependencies beyond `g++`, `make`, and (optionally) `verilator` for the HDL cosim.
+
 ## Repository map
 
 A single Python entry point (`main.py`) dispatches to thirteen algorithms living under [`algorithms/`](algorithms/) (Python fallbacks) and [`cpp/src/`](cpp/src/) (the C++20 solver reached through a subprocess bridge). Shared ITC 2007 parsing, models, and O(k) delta-evaluator sit in [`core/`](core/). Batch orchestration, results logging, and the figure factory are in [`utils/`](utils/), with the auto-tuner and tuned-parameter store under [`tooling/`](tooling/). Interactive notebooks and the Colab runbook are in [`notebooks/`](notebooks/); datasets, cached batches, and paper-grade figures are in [`instances/`](instances/), [`results/`](results/), and [`graphs/`](graphs/). The written artefacts (research report, speech script, deck) live in [`report/`](report/) and [`slides/`](slides/), with annotated citations in [`references/`](references/).
@@ -60,7 +78,7 @@ A single Python entry point (`main.py`) dispatches to thirteen algorithms living
 | Flag | Description |
 |------|-------------|
 | `--dataset FILE` | ITC 2007 `.exam` file |
-| `--algo NAME` | `greedy`, `tabu`, `kempe`, `sa`, `alns`, `gd`, `abc`, `ga`, `lahc`, `woa`, `hho`, `cpsat`, `vns` |
+| `--algo NAME` | `greedy`, `tabu`, `kempe`, `sa`, `alns`, `gd`, `abc`, `ga`, `lahc`, `woa`, `hho`, `cpsat`, `vns`, plus Phase-2 variants: `tabu_simd`, `tabu_cached`, `sa_cached`, `gd_cached`, `lahc_cached`, `alns_cached`, `alns_thompson`, `vns_cached` |
 | `--mode MODE` | `demo` (default), `plot`, `batches`, `tune` |
 | `--size N` | Exam count for synthetic demo mode |
 | `--seed N` | Random seed (default: 42) |

@@ -1,0 +1,22 @@
+[
+  {
+    "algorithm": "VNS (Cached+GVNS)",
+    "runtime": 7.501047,
+    "iterations": 5000,
+    "feasible": true,
+    "hard_violations": 0,
+    "soft_penalty": 9955,
+    "conflicts": 0,
+    "room_occupancy": 0,
+    "period_utilisation": 0,
+    "period_related": 0,
+    "room_related": 0,
+    "two_in_a_row": 50,
+    "two_in_a_day": 0,
+    "period_spread": 6855,
+    "non_mixed_durations": 2370,
+    "front_load": 630,
+    "period_penalty": 0,
+    "room_penalty": 50
+  }
+]
