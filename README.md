@@ -57,7 +57,7 @@ A single Python entry point (`main.py`) dispatches to thirteen algorithms living
 | [`main.py`](main.py) | Single CLI entry point — dispatches by `--algo`, `--dataset`, `--mode`. |
 | [`PROGRESS.md`](PROGRESS.md) | Long-form dev log: decisions, failed experiments, open research items. |
 
-<details>
+</details>
 
 <details>
 <summary>Full flag reference</summary>
