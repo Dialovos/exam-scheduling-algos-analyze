@@ -74,6 +74,42 @@ inline void undo_chain(Solution& sol, const std::vector<ChainUndo>& undo) {
 
 } // namespace kempe_detail
 
+// ── Cache-refresh hook (SFINAE) ───────────────────────────────
+// Any Evaluator with a `rebuild_contrib_for(e, sol)` method (i.e. the
+// CachedEvaluator) gets its cache refreshed for chain + neighbours after
+// bulk state mutations (Kempe chains). Plain FastEvaluator has no such
+// method, so the fallback no-op is chosen.
+namespace nbhd_detail {
+
+template <typename Ev>
+inline auto refresh_for_chain(const Ev& fe, const Solution& sol,
+                               const std::vector<int>& chain, int priority)
+    -> decltype(fe.rebuild_contrib_for(0, sol), void())
+{
+    (void)priority;
+    for (int e : chain) {
+        fe.rebuild_contrib_for(e, sol);
+        for (auto& pr : fe.P.adj[e]) fe.rebuild_contrib_for(pr.first, sol);
+    }
+}
+
+// Fallback (no cache to refresh)
+inline void refresh_for_chain(...) {}
+
+// Log a kempe chain's undo entries into a RecordingEvaluator so outer-level
+// rollback can unwind chain swaps through the base evaluator's apply_move
+// (keeping the cache coherent). No-op on plain FastEvaluator.
+template <typename Ev, typename ChainT>
+inline auto record_chain_undo(const Ev& fe, const ChainT& undo)
+    -> decltype(fe.append_chain_undo(undo), void())
+{
+    fe.append_chain_undo(undo);
+}
+
+inline void record_chain_undo(...) {}
+
+} // namespace nbhd_detail
+
 // ── Neighbourhood operators ────────────────────────────────────
 
 namespace nbhd {
@@ -90,9 +126,9 @@ struct MoveResult {
 // ── 1. move_single ──────────────────────────────────────────
 // Random exam -> random valid (period, room). 70% alias-weighted selection.
 
-template<typename AcceptFn>
+template<typename Ev, typename AcceptFn>
 inline MoveResult move_single(
-    Solution& sol, const FastEvaluator& fe,
+    Solution& sol, const Ev& fe,
     const std::vector<std::vector<int>>& valid_p,
     const std::vector<std::vector<int>>& valid_r,
     AliasTable& alias, std::mt19937& rng,
@@ -124,9 +160,9 @@ inline MoveResult move_single(
 // Exchange periods of two exams (keep rooms). Duration-compatible check.
 // Computes combined delta via temp-apply/undo.
 
-template<typename AcceptFn>
+template<typename Ev, typename AcceptFn>
 inline MoveResult swap_two(
-    Solution& sol, const FastEvaluator& fe,
+    Solution& sol, const Ev& fe,
     AliasTable& alias, std::mt19937& rng,
     AcceptFn accept_fn)
 {
@@ -165,9 +201,9 @@ inline MoveResult swap_two(
 // BFS Kempe chain swap between two periods. Uses partial_eval for delta.
 // Chain is applied before evaluation and undone if not accepted.
 
-template<typename AcceptFn>
+template<typename Ev, typename AcceptFn>
 inline MoveResult kempe_chain(
-    Solution& sol, const FastEvaluator& fe,
+    Solution& sol, const Ev& fe,
     const ProblemInstance& prob,
     AliasTable& alias, std::mt19937& rng,
     AcceptFn accept_fn)
@@ -196,6 +232,10 @@ inline MoveResult kempe_chain(
     double delta = new_pe.fitness() - old_pe.fitness();
 
     if (accept_fn(delta)) {
+        // Bulk state mutation: refresh cache if Ev supports it (no-op on FastEvaluator)
+        nbhd_detail::refresh_for_chain(fe, sol, chain, 0);
+        // Log chain undo for outer-level rollback (no-op if Ev isn't a RecordingEvaluator)
+        nbhd_detail::record_chain_undo(fe, undo);
         return {delta, true, (int)chain.size()};
     }
     // Undo if not accepted
@@ -207,9 +247,9 @@ inline MoveResult kempe_chain(
 // Steepest-descent relocation: scan ALL valid (period, room) for one exam.
 // Stronger than move_single because it exhaustively finds the best slot.
 
-template<typename AcceptFn>
+template<typename Ev, typename AcceptFn>
 inline MoveResult kick(
-    Solution& sol, const FastEvaluator& fe,
+    Solution& sol, const Ev& fe,
     const std::vector<std::vector<int>>& valid_p,
     const std::vector<std::vector<int>>& valid_r,
     AliasTable& alias, std::mt19937& rng,
@@ -253,8 +293,9 @@ inline MoveResult kick(
 // Blind perturbation: randomly relocate `intensity` exams. Always applies.
 // Used for diversification (reheat, escape local optima).
 
+template<typename Ev>
 inline MoveResult shake(
-    Solution& sol, const FastEvaluator& fe,
+    Solution& sol, const Ev& fe,
     const std::vector<std::vector<int>>& valid_p,
     const std::vector<std::vector<int>>& valid_r,
     int intensity, std::mt19937& rng)
@@ -283,9 +324,9 @@ inline MoveResult shake(
 // ── 6. room_beam ────────────────────────────────────────────
 // Fixed period, steepest-descent room reassignment for one exam.
 
-template<typename AcceptFn>
+template<typename Ev, typename AcceptFn>
 inline MoveResult room_beam(
-    Solution& sol, const FastEvaluator& fe,
+    Solution& sol, const Ev& fe,
     const std::vector<std::vector<int>>& valid_r,
     AliasTable& alias, std::mt19937& rng,
     AcceptFn accept_fn)
@@ -324,9 +365,9 @@ inline MoveResult room_beam(
 // ── 7. room_only ────────────────────────────────────────────
 // Same period, random new room.
 
-template<typename AcceptFn>
+template<typename Ev, typename AcceptFn>
 inline MoveResult room_only(
-    Solution& sol, const FastEvaluator& fe,
+    Solution& sol, const Ev& fe,
     const std::vector<std::vector<int>>& valid_r,
     AliasTable& alias, std::mt19937& rng,
     AcceptFn accept_fn)
@@ -355,10 +396,10 @@ inline MoveResult room_only(
 // ── Dispatcher ──────────────────────────────────────────────
 // Select and apply a neighbourhood operator by type.
 
-template<typename AcceptFn>
+template<typename Ev, typename AcceptFn>
 inline MoveResult select_and_apply(
     OpType op,
-    Solution& sol, const FastEvaluator& fe,
+    Solution& sol, const Ev& fe,
     const ProblemInstance& prob,
     const std::vector<std::vector<int>>& valid_p,
     const std::vector<std::vector<int>>& valid_r,

@@ -11,16 +11,31 @@
 #include "evaluator.h"
 #include "greedy.h"
 #include "tabu.h"
+#include "tabu_simd.h"
+#include "tabu_cached.h"
+#include "tabu_cached_cuda.h"
 #include "kempe.h"
 #include "sa.h"
+#include "sa_cached.h"
 #include "alns.h"
+#include "alns_cached.h"
+#include "alns_thompson.h"
+#include "alns_cuda.h"
+#include "sa_parallel_cuda.h"
 #include "gd.h"
+#include "gd_cached.h"
 #include "abc.h"
 #include "ga.h"
 #include "lahc.h"
+#include "lahc_cached.h"
 #include "woa.h"
+#include "ga_cuda.h"
+#include "abc_cuda.h"
+#include "hho_cuda.h"
+#include "woa_cuda.h"
 #include "cpsat.h"
 #include "vns.h"
+#include "vns_cached.h"
 #include "seeder.h"
 #include "hho.h"
 
@@ -241,7 +256,12 @@ int main(int argc, char* argv[]) {
     bool iterative_needed =
         run_all || want("tabu") || want("kempe") || want("sa") || want("alns") ||
         want("gd") || want("abc") || want("ga") || want("lahc") || want("woa") ||
-        want("cpsat") || want("vns") || want("hho") || want("seeder");
+        want("cpsat") || want("vns") || want("hho") || want("seeder") ||
+        want("tabu_simd") || want("tabu_cached") || want("tabu_cuda") || want("sa_cached") ||
+        want("gd_cached") || want("lahc_cached") || want("alns_cached") ||
+        want("alns_thompson") || want("alns_cuda") || want("vns_cached") ||
+        want("ga_cuda") || want("abc_cuda") || want("hho_cuda") || want("woa_cuda") ||
+        want("sa_parallel_cuda");
     if (iterative_needed && !init_sol_ptr) {
         seeder_result = solve_seeder(prob, seed, verbose);
         write_solution_file(seeder_result.sol, sln_dir + "/solution_seeder_" + ne_str + ".sln");
@@ -252,6 +272,11 @@ int main(int argc, char* argv[]) {
     if (want("tabu")) {
         auto r = solve_tabu(prob, tabu_iters, tabu_tenure, tabu_patience, seed, verbose, shared_init);
         write_solution_file(r.sol, sln_dir + "/solution_tabu_search_" + ne_str + ".sln");
+        results.push_back(move(r));
+    }
+    if (want("hho_cuda")) {
+        auto r = solve_hho_cuda(prob, hho_pop, hho_iters, seed, verbose, shared_init);
+        write_solution_file(r.sol, sln_dir + "/solution_hho_cuda_" + ne_str + ".sln");
         results.push_back(move(r));
     }
     if (want("hho")) {
@@ -284,9 +309,19 @@ int main(int argc, char* argv[]) {
         write_solution_file(r.sol, sln_dir + "/solution_abc_" + ne_str + ".sln");
         results.push_back(move(r));
     }
+    if (want("abc_cuda")) {
+        auto r = solve_abc_cuda(prob, abc_pop, abc_iters, 0, seed, verbose, shared_init);
+        write_solution_file(r.sol, sln_dir + "/solution_abc_cuda_" + ne_str + ".sln");
+        results.push_back(move(r));
+    }
     if (want("ga")) {
         auto r = solve_ga(prob, ga_pop, ga_iters, 0.8, 0.15, seed, verbose, shared_init);
         write_solution_file(r.sol, sln_dir + "/solution_genetic_algorithm_" + ne_str + ".sln");
+        results.push_back(move(r));
+    }
+    if (want("ga_cuda")) {
+        auto r = solve_ga_cuda(prob, ga_pop, ga_iters, 0.8, 0.15, seed, verbose, shared_init);
+        write_solution_file(r.sol, sln_dir + "/solution_ga_cuda_" + ne_str + ".sln");
         results.push_back(move(r));
     }
     if (want("lahc")) {
@@ -299,11 +334,73 @@ int main(int argc, char* argv[]) {
         write_solution_file(r.sol, sln_dir + "/solution_woa_" + ne_str + ".sln");
         results.push_back(move(r));
     }
+    if (want("woa_cuda")) {
+        auto r = solve_woa_cuda(prob, woa_pop, woa_iters, seed, verbose, shared_init);
+        write_solution_file(r.sol, sln_dir + "/solution_woa_cuda_" + ne_str + ".sln");
+        results.push_back(move(r));
+    }
     if (want("cpsat")) {
         auto r = solve_cpsat(prob, cpsat_time, seed, verbose, shared_init);
         write_solution_file(r.sol, sln_dir + "/solution_cpsat_" + ne_str + ".sln");
         results.push_back(move(r));
     }
+    // ── Phase 2 (cached/Thompson) variants — batch 19 ──
+    if (want("tabu_simd")) {
+        auto r = solve_tabu_simd(prob, tabu_iters, tabu_tenure, tabu_patience, seed, verbose, shared_init);
+        write_solution_file(r.sol, sln_dir + "/solution_tabu_simd_" + ne_str + ".sln");
+        results.push_back(move(r));
+    }
+    if (want("tabu_cuda")) {
+        auto r = solve_tabu_cached_cuda(prob, tabu_iters, tabu_tenure, tabu_patience, seed, verbose, shared_init);
+        write_solution_file(r.sol, sln_dir + "/solution_tabu_cuda_" + ne_str + ".sln");
+        results.push_back(move(r));
+    }
+    if (want("tabu_cached")) {
+        auto r = solve_tabu_cached(prob, tabu_iters, tabu_tenure, tabu_patience, seed, verbose, shared_init);
+        write_solution_file(r.sol, sln_dir + "/solution_tabu_cached_" + ne_str + ".sln");
+        results.push_back(move(r));
+    }
+    if (want("sa_cached")) {
+        auto r = solve_sa_cached(prob, sa_iters, 0.0, 0.9995, seed, verbose, shared_init);
+        write_solution_file(r.sol, sln_dir + "/solution_sa_cached_" + ne_str + ".sln");
+        results.push_back(move(r));
+    }
+    if (want("gd_cached")) {
+        auto r = solve_great_deluge_cached(prob, gd_iters, 0.0, seed, verbose, shared_init);
+        write_solution_file(r.sol, sln_dir + "/solution_gd_cached_" + ne_str + ".sln");
+        results.push_back(move(r));
+    }
+    if (want("lahc_cached")) {
+        auto r = solve_lahc_cached(prob, lahc_iters, lahc_list, seed, verbose, shared_init);
+        write_solution_file(r.sol, sln_dir + "/solution_lahc_cached_" + ne_str + ".sln");
+        results.push_back(move(r));
+    }
+    if (want("alns_cached")) {
+        auto r = solve_alns_cached(prob, alns_iters, 0.15, seed, verbose, shared_init);
+        write_solution_file(r.sol, sln_dir + "/solution_alns_cached_" + ne_str + ".sln");
+        results.push_back(move(r));
+    }
+    if (want("alns_cuda")) {
+        auto r = solve_alns_cuda(prob, alns_iters, 0.15, seed, verbose, shared_init);
+        write_solution_file(r.sol, sln_dir + "/solution_alns_cuda_" + ne_str + ".sln");
+        results.push_back(move(r));
+    }
+    if (want("sa_parallel_cuda")) {
+        auto r = solve_sa_parallel_cuda(prob, 64, sa_iters, seed, verbose, shared_init);
+        write_solution_file(r.sol, sln_dir + "/solution_sa_parallel_cuda_" + ne_str + ".sln");
+        results.push_back(move(r));
+    }
+    if (want("alns_thompson")) {
+        auto r = solve_alns_thompson(prob, alns_iters, 0.15, seed, verbose, shared_init);
+        write_solution_file(r.sol, sln_dir + "/solution_alns_thompson_" + ne_str + ".sln");
+        results.push_back(move(r));
+    }
+    if (want("vns_cached")) {
+        auto r = solve_vns_cached(prob, vns_iters, vns_budget, seed, verbose, shared_init);
+        write_solution_file(r.sol, sln_dir + "/solution_vns_cached_" + ne_str + ".sln");
+        results.push_back(move(r));
+    }
+
     if (want("vns")) {
         auto r = solve_vns(prob, vns_iters, vns_budget, seed, verbose, shared_init);
         write_solution_file(r.sol, sln_dir + "/solution_vns_" + ne_str + ".sln");

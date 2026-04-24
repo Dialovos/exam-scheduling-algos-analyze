@@ -287,6 +287,68 @@ inline void repair_greedy(
     }
 }
 
+// Batched-scoring variant of repair_greedy. Identical semantics (same sort,
+// same cost formula), but routes all (pid, rid) scoring through a
+// `ScorerT` that exposes `score_placement_batch(eids, pids, rids, costs)`.
+// On GPU-enabled builds, this becomes one kernel launch per unplaced exam
+// covering np × nr candidates; on CPU, it's equivalent to repair_greedy
+// (verified bit-exact in `make bench` placement-scorer validator).
+template <typename ScorerT>
+inline void repair_greedy_batched(
+    Solution& sol, const FastEvaluator& fe,
+    ScorerT& scorer,            // must have sync_state(sol) + score_placement_batch
+    const std::vector<int>& removed,
+    const std::vector<std::vector<int>>& valid_p,
+    const std::vector<std::vector<int>>& valid_r)
+{
+    std::vector<int> order = removed;
+    std::sort(order.begin(), order.end(), [&](int a, int b) {
+        return fe.P.adj[a].size() > fe.P.adj[b].size();
+    });
+
+    // Scratch buffers reused across all placements
+    std::vector<int32_t> mv_eid, mv_pid, mv_rid;
+    std::vector<long long> costs;
+    mv_eid.reserve(2048); mv_pid.reserve(2048); mv_rid.reserve(2048);
+
+    for (int eid : order) {
+        const auto& vp = valid_p[eid];
+        const auto& vr = valid_r[eid];
+        if (vp.empty() || vr.empty()) {
+            if (!vp.empty() && !vr.empty()) sol.assign(eid, vp[0], vr[0]);
+            continue;
+        }
+
+        // Enumerate all (pid, rid) candidates for this exam
+        mv_eid.clear(); mv_pid.clear(); mv_rid.clear();
+        for (int pid : vp)
+            for (int rid : vr) {
+                mv_eid.push_back(eid);
+                mv_pid.push_back(pid);
+                mv_rid.push_back(rid);
+            }
+
+        // State has changed since last placement (previous exam was assigned)
+        // so re-sync before scoring.
+        scorer.sync_state(sol);
+        scorer.score_placement_batch(mv_eid, mv_pid, mv_rid, costs);
+
+        long long best_cost = (long long)1e18;
+        int best_pid = -1, best_rid = -1;
+        for (size_t k = 0; k < costs.size(); k++) {
+            if (costs[k] < best_cost) {
+                best_cost = costs[k];
+                best_pid = mv_pid[k];
+                best_rid = mv_rid[k];
+            }
+        }
+        if (best_pid >= 0)
+            sol.assign(eid, best_pid, best_rid);
+        else
+            sol.assign(eid, vp[0], vr[0]);
+    }
+}
+
 inline void repair_random(
     Solution& sol,
     const std::vector<int>& removed,
