@@ -6,7 +6,7 @@ Notes on running the full paper batch on Colab without touching your local check
 
 ## TL;DR
 
-1. Open `https://colab.research.google.com/github/<OWNER>/<REPO>/blob/master/notebooks/colab_runner.ipynb`. Replace `<OWNER>/<REPO>` with whichever GitHub repo you're running against (e.g. `yourname/exam-scheduling`).
+1. Open `https://colab.research.google.com/github/<OWNER>/<REPO>/blob/main/notebooks/colab_runner.ipynb`. Replace `<OWNER>/<REPO>` with whichever GitHub repo you're running against (e.g. `yourname/exam-scheduling`).
 2. Runtime → **Change runtime type** → pick one:
    - **A100** (recommended): ~12 vCPUs, 83 GB RAM. Roughly 10× faster than free tier.
    - **T4 High-RAM**: ~4 vCPUs, 25 GB. About 4× faster than free tier.
