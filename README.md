@@ -11,14 +11,13 @@ Test with `.venv/bin/python -m pytest tests/ -x --timeout=120`.
 Research is complete. The final paper and slides are in [`report/`](report/) and [`slides/`](slides/).
 
 <p align="center">
-  <i>Eight ITC 2007 datasets.</i>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="graphs/readme/leaderboard-dark.png">
+    <img src="graphs/readme/leaderboard-light.png" width="760" alt="GVNS, Kempe and Tabu have the smallest mean gaps to the proved CP-SAT optimum; Greedy has the largest.">
+  </picture>
 </p>
 
-<p align="center">
-  <img src="graphs/fig2_family_heatmap.png" width="860"/>
-</p>
-
-<p align="center"><sub>Normalized soft penalty across 8 ITC 2007 sets, grouped by algorithm family. Red box marks the row winner.</sub></p>
+<p align="center"><sub>GVNS has the smallest mean gap; set8 is excluded because its IP and heuristic scores use different evaluator scales.</sub></p>
 
 ---
 
@@ -33,8 +32,9 @@ Research is complete. The final paper and slides are in [`report/`](report/) and
 - [Usage](#usage)
 - [Research Questions](#research-questions)
 - [Reproducing the paper](#reproducing-the-paper)
-- [GenAI Usage Disclosure](#genai-usage-disclosure)
 - [References](#references)
+
+<a id="repository-map"></a>
 
 <details>
 <summary>Repository map</summary>
@@ -46,20 +46,20 @@ A single Python entry point (`main.py`) dispatches to thirteen algorithms living
 |--------|---------------|
 | [`algorithms/`](algorithms/) | Python implementations of 8 algorithms + the C++ subprocess bridge (`cpp_bridge.py`) and OR-Tools CP-SAT / PuLP IP solver (`ip_solver.py`). |
 | [`core/`](core/) | ITC 2007 parser, data models, synthetic instance generator, and the fast O(k) delta-evaluator (`fast_eval.py`, `evaluator.py`). |
-| [`cpp/src/`](cpp/src/) | C++20 solver — one binary, all 13 base algorithms + Phase-2 cached/SIMD/Thompson variants. Headers per algorithm (`tabu.h`, `sa.h`, `cpsat.h`, …); shared `seeder`/`repair`/`neighbourhoods`; HDL cycle-sim in [`cpp/src/hdl/`](cpp/src/hdl/). |
+| [`cpp/src/`](cpp/src/) | C++20 solver — one binary, all 13 base algorithms + Phase-2 cached/SIMD/Thompson variants. Headers per algorithm (`tabu.h`, `sa.h`, `cpsat.h`, …); shared `seeder`/`repair`/`neighbourhoods`. |
 | [`tooling/`](tooling/) | Auto-tuner package (`tuner/`), tuned-param store with version history (`tuned_params.py`, `tuned_params.json`), parameter sweep and sensitivity export. |
 | [`utils/`](utils/) | Batch manager, results logger, and the `plots/` figure factory (comparative, convergence, breakdown, tuning). |
 | [`notebooks/`](notebooks/) | `exam_scheduling.ipynb` (local exploration), `colab_runner.ipynb` (full paper batch), `batch19_colab.ipynb` (Phase-2 validation), and [`COLAB_RUNBOOK.md`](notebooks/COLAB_RUNBOOK.md). |
 | [`instances/`](instances/) | The eight ITC 2007 Examination Track `.exam` files (set1 – set8). |
 | [`results/`](results/) | Per-batch outputs: `aggregated.csv`, raw solutions, per-algorithm logs. `batch_018_colab/` = paper-grade batch (13 algos, full matrix); `batch_019_colab/` = Phase-2 cached/Thompson validation. |
-| [`graphs/`](graphs/) | The eight paper figures (`fig1_pareto.png` … `fig8_gap_leaderboard.png`) plus `tables/` (CSV + LaTeX). Cross-batch analysis now lives as a printed-table markdown at [`graphs/CROSS_BATCH_ANALYSIS.md`](graphs/CROSS_BATCH_ANALYSIS.md). |
-| [`docs/`](docs/) | [`PERF_ROADMAP.md`](docs/PERF_ROADMAP.md) — CPU design, measurements, parity validation. [`FPGA_DESIGN.md`](docs/FPGA_DESIGN.md) — HDL cycle-sim for move_delta. |
+| [`graphs/`](graphs/) | The eight paper figures (`fig1_pareto.png` … `fig8_gap_leaderboard.png`) plus CSV `tables/` and light/dark README figures in `readme/`. Cross-batch analysis now lives as a printed-table markdown at [`graphs/CROSS_BATCH_ANALYSIS.md`](graphs/CROSS_BATCH_ANALYSIS.md). |
+| [`docs/`](docs/) | [`PERF_ROADMAP.md`](docs/PERF_ROADMAP.md) — CPU design, measurements, parity validation. |
 | [`report/`](report/) | Peer research report in arXiv-style flat prose (`peer_research_report.md` / `.pdf`). |
 | [`slides/`](slides/) | Deck generator (`build_deck.py`, `deck_*.py`), rendered `.pptx` / `.pdf`, and the 16-slide `speech_script.md` / `.pdf`. |
 | [`references/`](references/) | Annotated bibliography (`references.md`) — the full reading list behind the paper. |
 | [`tests/`](tests/) | Pytest suite — tuner import smoke test, evaluator invariants, CI-facing checks. |
 | [`.github/`](.github/workflows/) | `reproduce.yml` CI workflow: builds the binary, runs pytest, smoke-tests Tabu on set1. |
-| [`Makefile`](Makefile) | `make` builds the C++ solver; `make reproduce` runs the local smoke + replays figures. |
+| [`Makefile`](Makefile) | `make` builds the C++ solver; `make reproduce` runs the local smoke + replays paper figures; `make readme-figures` renders README figures. |
 | [`main.py`](main.py) | Single CLI entry point — dispatches by `--algo`, `--dataset`, `--mode`. |
 | [`PROGRESS.md`](PROGRESS.md) | Long-form dev log: decisions, failed experiments, open research items. |
 
@@ -153,7 +153,8 @@ exam-scheduling/
 │       ├── comparative.py    # bars, boxes, radar, heatmap, Pareto
 │       ├── convergence.py    # line/scatter/scaling (with by_family facets)
 │       ├── breakdown.py      # soft-constraint stacks
-│       └── tuning.py         # sensitivity + trial trajectories
+│       ├── tuning.py         # sensitivity + trial trajectories
+│       └── readme.py         # light and dark README figures
 │
 ├── notebooks/
 │   ├── exam_scheduling.ipynb # interactive exploration notebook
@@ -162,7 +163,9 @@ exam-scheduling/
 │
 ├── instances/
 ├── results/
-├── graphs/
+├── graphs/                  # paper figures and CSV tables
+│   └── readme/              # README figures in both themes
+├── scripts/make_readme_figures.py
 ├── report/
 ├── references/
 └── tests/
@@ -224,12 +227,6 @@ That runs every algorithm on set4 (273 exams — small and fast) and drops outpu
 
 All algorithms run through one C++ binary. Python fallbacks exist for algorithms 1-8 when the binary is unavailable. The Phase-2 `*_cached` / `*_simd` / `alns_thompson` variants wrap these base 13 and are available via the same `--algo` flag — see [`docs/PERF_ROADMAP.md`](docs/PERF_ROADMAP.md) for what each layer changes and when it pays off.
 
-<p align="center">
-  <img src="graphs/fig5_sensitivity.png" width="560"/>
-</p>
-
-<p align="center"><sub>Per-algorithm parameter sensitivity fingerprint. Red box = top-1 most sensitive knob for that algorithm.</sub></p>
-
 ### What makes them fast
 
 - Delta evaluation — `move_delta()` is O(k) instead of O(n^2) full eval per move. This is the single biggest speedup and every local search leans on it.
@@ -257,58 +254,30 @@ All sourced from the [ITC 2007 Examination Track](https://www.eeecs.qub.ac.uk/it
 ## Results
 
 <p align="center">
-  <img src="graphs/fig2_family_heatmap.png" width="860"/>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="graphs/readme/per-set-heatmap-dark.png">
+    <img src="graphs/readme/per-set-heatmap-light.png" width="760" alt="Trajectory methods have the best mean penalty on every ITC set. GVNS and Tabu lead the mean ranks; Greedy is at least twice the best on all eight sets.">
+  </picture>
 </p>
 
-<p align="center"><sub>Family dominance per ITC 2007 instance. Cells are normalized soft penalty (= soft / best on that instance); red box marks the winning family per row.</sub></p>
+<p align="center"><sub>Each cell compares the algorithm’s mean penalty with the best mean on that set; bold marks the best, and values above 2 are capped.</sub></p>
 
-<br/>
+Trajectory methods take the best mean penalty on every set. GVNS and Tabu lead the mean ranks. Population methods lag on the tightly-constrained sets (set3, set5, set7) where room-capacity reasoning matters. The discovered champion chain is `alns -> kempe -> tabu` (see [Chain methodology](#chain-methodology)).
 
-Trajectory methods (Tabu, SA, GD, LAHC, Kempe) take the row winner on every instance once families are aggregated to their best member. Construction (Greedy/DSatur) lands within a few percent on small sets but blows up on the dense ones. Population methods lag on the tightly-constrained sets (set3, set5, set7) where room-capacity reasoning matters. The discovered champion chain `alns -> kempe -> tabu` is the warm-start that most Trajectory winners actually run inside (see fig 3).
+The family comparison is in [`graphs/tables/t4_family_comparison.csv`](graphs/tables/t4_family_comparison.csv), with `*` marking the family-best on each instance. **Tabu carries Trajectory** (4 family wins), **GVNS** is the close second-best (2 wins, lowest mean intra-family rank); **ABC dominates Population** (7 of 8 family wins, mean intra-family rank 1.12).
 
-The un-collapsed companion is `graphs/tables/t4_family_comparison.csv`: same data per algorithm, grouped by family, with `*` marking the family-best on each instance. Headline reads from that table — **Tabu carries Trajectory** (4 family wins), **GVNS** is the close second-best (2 wins, lowest mean intra-family rank); **ABC dominates Population** (7 of 8 family wins, mean intra-family rank 1.12). Family-loser slots (GD in Trajectory, HHO+ in Population) are visible at a glance because they have zero `*` cells.
-
-<br/>
-
-<table>
-<tr>
-<td width="50%">
 <p align="center">
-  <img src="graphs/fig1_pareto.png" width="100%"/>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="graphs/readme/quality-vs-runtime-dark.png">
+    <img src="graphs/readme/quality-vs-runtime-light.png" width="760" alt="On the synthetic 1,000-exam instance, GVNS and ABC have the lowest mean penalties, while faster algorithms trade quality for runtime.">
+  </picture>
 </p>
-<p align="center"><sub>Pareto frontier (quality vs runtime, synthetic n=1000) colored by family. Bottom-left dominates.</sub></p>
-</td>
-<td width="50%">
-<p align="center">
-  <img src="graphs/fig6_ip_vs_heuristic.png" width="100%"/>
-</p>
-<p align="center"><sub>CP-SAT IP optimum vs best heuristic on the 5 solved instances, with per-component soft breakdown and gap%.</sub></p>
-</td>
-</tr>
-</table>
 
-<br/>
+<p align="center"><sub>One mean per algorithm on synthetic n=1000; the step line marks the non-dominated choices. Greedy is infeasible here.</sub></p>
 
 ### vs CP-SAT IP optimum
 
-<table>
-<tr>
-<td width="50%">
-<p align="center">
-  <img src="graphs/fig7_gap_heatmap.png" width="100%"/>
-</p>
-<p align="center"><sub>Gap-to-IP heatmap: rows = algorithms (sorted by mean gap), columns = 4 solved instances (set8 excluded — evaluator-scale mismatch), cell = (algo_soft / ip_soft - 1) * 100%.</sub></p>
-</td>
-<td width="50%">
-<p align="center">
-  <img src="graphs/fig8_gap_leaderboard.png" width="100%"/>
-</p>
-<p align="center"><sub>Leaderboard vs IP: mean gap to the proved CP-SAT optimum across 4 solved instances (set8 excluded). The baseline is the full-converged IP run (CP-SAT + Tabu warm-start, 2 h cap); the "CP-SAT (60s)" bar is a separate cold main-batch run with a 60 s per-seed budget, so the positive gap is a budget difference, not a solver defect. Bars colored by family, std error bars across instances.</sub></p>
-</td>
-</tr>
-</table>
-
-<br/>
+The hero leaderboard compares four solved sets (set1, set2, set4, set6). Its baseline is the IP run: CP-SAT with a Tabu warm-start and a 2 h cap, which proved optimum on those sets. The “CP-SAT (60s)” bar is a separate cold main-batch run with a 60 s per-seed budget.
 
 #### CP-SAT scaling cliff (RQ 4)
 
@@ -319,43 +288,20 @@ CP-SAT (OR-Tools, branch-and-bound on the full ILP, 2 h wall-clock budget) shows
 | Solved (optimum returned) | set6, set4, set8, set1, set2 | 242 – 870 |
 | Timed out (no incumbent reported) | set3, set5, set7 | 934 – 1096 |
 
-Every instance with ≤ 870 exams completes; every instance with ≥ 934 exams fails — so the practical ceiling sits in the ~900-exam band. The failure mode in our runs is timeout rather than memory: CP-SAT continues searching but cannot prove optimality before the budget elapses, and our pipeline only records the final optimum (so the empty `soft_breakdown.json` for sets 3, 5, 7 reflects "no proven optimum" rather than a crash). Heuristics, by contrast, return a feasible solution on every instance — fig 8 shows their gap to IP on the solvable subset, but the cliff above is what makes them *necessary* on the upper half of ITC 2007.
+Every instance with ≤ 870 exams completes; every instance with ≥ 934 exams fails — so the practical ceiling sits in the ~900-exam band. The failure mode in our runs is timeout rather than memory: CP-SAT continues searching but cannot prove optimality before the budget elapses, and our pipeline only records the final optimum (so the empty `soft_breakdown.json` for sets 3, 5, 7 reflects "no proven optimum" rather than a crash). Heuristics, by contrast, return a feasible solution on every instance — the leaderboard above shows their gap to IP on the solvable subset, but the cliff above is what makes them *necessary* on the upper half of ITC 2007.
 
-<br/>
 
 ### Scalability
 
-<p align="center">
-  <img src="graphs/fig4_scaling.png" width="860"/>
-</p>
-
-<p align="center"><sub>Runtime (log-log, left) and soft penalty (right) vs problem size, grouped by algorithm family on synthetic instances.</sub></p>
-
-<br/>
-
-### Sensitivity
-
-<p align="center">
-  <img src="graphs/fig5_sensitivity.png" width="780"/>
-</p>
-
-<p align="center"><sub>Parameter sensitivity fingerprint. Left: iters sensitivity per algorithm (universal sweep param). Right: non-iters params (pop, list, patience, tenure, budget) only where actually swept. Sensitivity = (max - min) / mean of soft penalty. Red box marks the top-1 non-iter param per algorithm.</sub></p>
-
-<br/>
+The synthetic scaling ladder covers 50–1000 exams. Runtime and penalty by family are recorded in [`graphs/fig4_scaling.png`](graphs/fig4_scaling.png).
 
 ### Chain methodology
 
-<p align="center">
-  <img src="graphs/fig3_chain_methodology.png" width="860"/>
-</p>
-
-<p align="center"><sub>Chain-finder: Successive Halving ladder + prefix cache + 1-point crossover on the left; top-5 discovered chains on the right.</sub></p>
-
-<br/>
+The chain-finder uses Successive Halving, a prefix cache, and crossover to search warm-started algorithm sequences. The top five chains are in [`graphs/tables/t2_chain_top5.csv`](graphs/tables/t2_chain_top5.csv); the paper diagram is [`graphs/fig3_chain_methodology.png`](graphs/fig3_chain_methodology.png).
 
 ### Research figures
 
-All paper-grade outputs live under `graphs/`:
+Paper figures live in `graphs/`; README figures live in `graphs/readme/` (`make readme-figures` regenerates them).
 
 | File | Content |
 |------|---------|
@@ -368,14 +314,14 @@ All paper-grade outputs live under `graphs/`:
 | `fig7_gap_heatmap.png` | Gap to CP-SAT IP optimum per algorithm and instance |
 | `fig8_gap_leaderboard.png` | Leaderboard: mean gap to the proved CP-SAT IP optimum across 4 solved instances (set8 excluded). Baseline = IP run (warm-started, 2 h cap, proves optimum); "CP-SAT (60s)" bar = cold main-batch run with 60 s per-seed budget |
 
-Tables are in `graphs/tables/` as both CSV (notebook/markdown) and LaTeX (paper):
+Tables are in `graphs/tables/` as CSV:
 
 | File | Content |
 |------|---------|
-| `t1_leaderboard.{csv,tex}` | Algo × instance soft-penalty grid, sorted by mean rank. IP row shows full-converged CP-SAT (dash = timed out at 2 h; `*` on `set8` flags the evaluator-scale anomaly excluded from fig 7/8) |
-| `t2_chain_top5.{csv,tex}` | Top-5 chains discovered by the chain-finder, scored across all instances |
-| `t3_partial_adopt.{csv,tex}` | Tuner-proposed param deltas: which were adopted vs reverted, and why |
-| `t4_family_comparison.{csv,tex}` | Per-family algo breakdown (un-collapsed companion to fig 2). Cell = mean ± std soft penalty; `*` = family-best on that instance (only fires when 2+ algos compete in the family on that row); *Family Rank* = mean intra-family rank, *Family Wins* = instances where this algo is best in its family. Solo-member families (Construction = Greedy alone; Exact/Hybrid = CP-SAT alone) report `--` for both columns |
+| `t1_leaderboard.csv` | Algo × instance soft-penalty grid, sorted by mean rank. IP row shows full-converged CP-SAT (dash = timed out at 2 h; `*` on `set8` flags the evaluator-scale anomaly excluded from fig 7/8) |
+| `t2_chain_top5.csv` | Top-5 chains discovered by the chain-finder, scored across all instances |
+| `t3_partial_adopt.csv` | Tuner-proposed param deltas: which were adopted vs reverted, and why |
+| `t4_family_comparison.csv` | Per-family algo breakdown (un-collapsed companion to fig 2). Cell = mean ± std soft penalty; `*` = family-best on that instance (only fires when 2+ algos compete in the family on that row); *Family Rank* = mean intra-family rank, *Family Wins* = instances where this algo is best in its family. Solo-member families (Construction = Greedy alone; Exact/Hybrid = CP-SAT alone) report `--` for both columns |
 
 Regenerate with:
 
@@ -408,6 +354,17 @@ The pipeline runs in four phases:
 
 > [!NOTE]
 > In global mode, scores are normalized per-dataset and aggregated via geometric mean. A config that's great on set4 but terrible on set1 loses to one that's merely solid across both. Every update is gated: aggregate must improve, trial counts must be comparable, and no single dataset can regress more than 15%.
+
+### Iteration sensitivity
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="graphs/readme/iteration-sensitivity-dark.png">
+    <img src="graphs/readme/iteration-sensitivity-light.png" width="760" alt="LAHC, SA and Kempe vary most with iteration budget; Great Deluge and GA vary least in the recorded sweep.">
+  </picture>
+</p>
+
+<p align="center"><sub>Sensitivity = (highest − lowest) / mean soft penalty across the tested iteration budgets; larger values suggest more tuning payoff.</sub></p>
 
 Winning parameters are auto-saved to `tooling/tuned_params.json` with version history for rollback.
 
@@ -447,7 +404,7 @@ Colab: open the corresponding notebook and `Runtime → Run all`. Batch 19 is CP
 
 **Cross-batch analysis tables** (coverage, global normalized ranking, tier progression, per-instance winners, same-batch variant deltas, runtime comparison) are in [`graphs/CROSS_BATCH_ANALYSIS.md`](graphs/CROSS_BATCH_ANALYSIS.md) and regenerated by `python3 scripts/make_batch_comparison.py` (prints to stdout + rewrites the file).
 
-**Microbenchmarks** (move_delta + portfolio + FPGA cycle-sim): `make bench-omp BENCH_INSTANCE=instances/exam_comp_setX.exam`. Everything runs on a fresh clone with no non-standard dependencies beyond `g++`, `make`, and (optionally) `verilator` for the HDL cosim.
+**Microbenchmarks** (move_delta + portfolio): `make bench-omp BENCH_INSTANCE=instances/exam_comp_setX.exam`. Builds with `g++` and `make`.
 
 ---
 
@@ -459,7 +416,6 @@ Colab: open the corresponding notebook and `Runtime → Run all`. Batch 19 is CP
 - GNU Make (Linux/macOS native; Windows: `mingw32-make` from MSYS2, or Make inside WSL2)
 - Python 3.10+
 - pip packages: see `requirements.txt`
-- *(Optional, FPGA cosim)* Verilator ≥ 5.0 for the HDL cycle-sim path (`sudo apt install verilator` — Ubuntu 24.04 ships 5.x). Driven by `make -f cpp/src/hdl/sim.mk`; see [`docs/FPGA_DESIGN.md`](docs/FPGA_DESIGN.md). Not needed for any algorithm — only to reproduce the cycle-count numbers.
 
 ### Setup
 
@@ -549,10 +505,6 @@ python main.py --show-params
 - CI: every push runs `.github/workflows/reproduce.yml` — compiles the
   binary, runs the pytest suite, smoke-tests Tabu on set1, and exercises
   the plotting module.
-
-## GenAI usage disclosure
-
-AI-assisted coding (claude and ChatGPT) was used throughout development for algorithm implementation, debugging, and code refactoring.
 
 ## References
 

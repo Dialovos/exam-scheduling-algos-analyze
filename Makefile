@@ -19,12 +19,12 @@ HEADERS  = $(SRC_DIR)/models.h $(SRC_DIR)/parser.h $(SRC_DIR)/evaluator.h \
            $(SRC_DIR)/alns_thompson.h $(SRC_DIR)/vns_cached.h \
            $(SRC_DIR)/xoshiro.h $(SRC_DIR)/ejection.h
 
-.PHONY: all clean test reproduce bench bench-omp fast-pgo pgo-clean batch19 batch19-colab
+.PHONY: all clean test reproduce bench bench-omp fast-pgo pgo-clean batch19 batch19-colab readme-figures
 
 BENCH_SRC = $(SRC_DIR)/bench_eval.cpp
 BENCH_BIN = $(BUILD_DIR)/bench_eval
 BENCH_HDR = $(HEADERS) $(SRC_DIR)/evaluator_simd.h $(SRC_DIR)/tabu_simd.h \
-            $(SRC_DIR)/portfolio.h $(SRC_DIR)/polish.h $(SRC_DIR)/fpga_sim.h \
+            $(SRC_DIR)/portfolio.h $(SRC_DIR)/polish.h \
             $(SRC_DIR)/evaluator_cached.h $(SRC_DIR)/tabu_cached.h \
             $(SRC_DIR)/sa_cached.h $(SRC_DIR)/gd_cached.h $(SRC_DIR)/alns_cached.h \
             $(SRC_DIR)/lahc_cached.h $(SRC_DIR)/vns_cached.h $(SRC_DIR)/alns_thompson.h \
@@ -128,3 +128,7 @@ reproduce: $(BIN)
 	@echo "=== Regenerating paper figures from $(REPRO_BATCH) into graphs/ ==="
 	python3 $(REPRO_BATCH)/make_paper_figures.py
 	@echo "=== Done. Figures written to graphs/ ==="
+
+# README figures in light and dark themes, using the cached paper batch.
+readme-figures:
+	.venv/bin/python scripts/make_readme_figures.py
