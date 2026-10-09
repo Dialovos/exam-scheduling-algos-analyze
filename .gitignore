@@ -1,0 +1,24 @@
+# Python environments and caches
+__pycache__/
+*.py[co]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# C++ and Verilator build output
+cpp/build/
+cpp/src/hdl/obj_dir/
+*.exe
+*.o
+*.so
+*.d
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
