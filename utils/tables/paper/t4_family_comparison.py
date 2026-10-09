@@ -34,7 +34,7 @@ def _fmt_cell(mean, std, *, marker=""):
 
 
 def make_t4(out_dir):
-    """Write T4 family comparison to ``<out_dir>/t4_family_comparison.{csv,tex}``."""
+    """Write and return the T4 family comparison CSV at ``<out_dir>/t4_family_comparison.csv``."""
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -111,30 +111,6 @@ def make_t4(out_dir):
     out_df = pd.DataFrame(rows)[columns]
 
     csv_path = out_dir / "t4_family_comparison.csv"
-    tex_path = out_dir / "t4_family_comparison.tex"
     out_df.to_csv(csv_path, index=False)
-    tex_path.write_text(_to_booktabs(out_df))
 
-    return csv_path, tex_path
-
-
-def _tex_escape(s):
-    s = str(s)
-    for a, b in (("\\", r"\textbackslash{}"), ("&", r"\&"), ("%", r"\%"),
-                 ("$", r"\$"), ("#", r"\#"), ("_", r"\_"), ("{", r"\{"),
-                 ("}", r"\}"), ("~", r"\textasciitilde{}"),
-                 ("^", r"\textasciicircum{}")):
-        s = s.replace(a, b)
-    return s
-
-
-def _to_booktabs(df):
-    cols = list(df.columns)
-    col_spec = "ll" + "r" * (len(cols) - 2)
-    lines = [r"\begin{tabular}{" + col_spec + "}", r"\toprule",
-             " & ".join(_tex_escape(c) for c in cols) + r" \\",
-             r"\midrule"]
-    for _, row in df.iterrows():
-        lines.append(" & ".join(_tex_escape(row[c]) for c in cols) + r" \\")
-    lines += [r"\bottomrule", r"\end{tabular}"]
-    return "\n".join(lines) + "\n"
+    return csv_path

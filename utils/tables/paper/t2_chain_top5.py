@@ -6,7 +6,6 @@ from pathlib import Path
 import pandas as pd
 
 from utils.plots.shared import load_batch018
-from utils.tables.paper.t1_leaderboard import _to_booktabs
 
 
 def _format_chain(chain_steps):
@@ -25,6 +24,7 @@ def _format_per_step_params(chain_steps):
 
 
 def make_t2(out_dir):
+    """Write and return the T2 chain top-five CSV path."""
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -53,8 +53,6 @@ def make_t2(out_dir):
     ])
 
     csv_path = out_dir / "t2_chain_top5.csv"
-    tex_path = out_dir / "t2_chain_top5.tex"
     out_df.to_csv(csv_path, index=False)
-    tex_path.write_text(_to_booktabs(out_df))
 
-    return csv_path, tex_path
+    return csv_path
