@@ -4,6 +4,12 @@
   <b>Hoang Le</b> &nbsp;·&nbsp; <b>Ian Cronin</b>
 </p>
 
+C++20 exam-timetabling solver with Python tooling and 13 algorithms across eight ITC 2007 datasets.
+Set up `.venv/` and install `requirements.txt` and `requirements-dev.txt`.
+Run `make`, then `cpp/build/exam_solver instances/exam_comp_set1.exam --algo tabu`.
+Test with `.venv/bin/python -m pytest tests/ -x --timeout=120`.
+Research is complete. The final paper and slides are in [`report/`](report/) and [`slides/`](slides/).
+
 <p align="center">
   <i>Eight ITC 2007 datasets.</i>
 </p>
@@ -23,7 +29,7 @@
 - [Datasets](#datasets)
 - [Results](#results)
 - [Auto-Tuner](#auto-tuner)
-- [Phase 2 / Phase 3 — cached, Thompson, and CUDA variants](#phase-2--phase-3--cached-thompson-and-cuda-variants)
+- [Phase 2 — cached, SIMD, and Thompson variants](#phase-2--cached-simd-and-thompson-variants)
 - [Usage](#usage)
 - [Research Questions](#research-questions)
 - [Reproducing the paper](#reproducing-the-paper)
@@ -40,14 +46,14 @@ A single Python entry point (`main.py`) dispatches to thirteen algorithms living
 |--------|---------------|
 | [`algorithms/`](algorithms/) | Python implementations of 8 algorithms + the C++ subprocess bridge (`cpp_bridge.py`) and OR-Tools CP-SAT / PuLP IP solver (`ip_solver.py`). |
 | [`core/`](core/) | ITC 2007 parser, data models, synthetic instance generator, and the fast O(k) delta-evaluator (`fast_eval.py`, `evaluator.py`). |
-| [`cpp/src/`](cpp/src/) | C++20 solver — one binary, all 13 base algorithms + Phase-2 cached variants + Phase-3 `*_cuda` variants. Headers per algorithm (`tabu.h`, `sa.h`, `cpsat.h`, …, `tabu_cached_cuda.h`, `sa_parallel_cuda.h`, …); CUDA kernels and evaluator twin in [`cpp/src/cuda/`](cpp/src/cuda/); shared `seeder`/`repair`/`neighbourhoods`. |
+| [`cpp/src/`](cpp/src/) | C++20 solver — one binary, all 13 base algorithms + Phase-2 cached/SIMD/Thompson variants. Headers per algorithm (`tabu.h`, `sa.h`, `cpsat.h`, …); shared `seeder`/`repair`/`neighbourhoods`; HDL cycle-sim in [`cpp/src/hdl/`](cpp/src/hdl/). |
 | [`tooling/`](tooling/) | Auto-tuner package (`tuner/`), tuned-param store with version history (`tuned_params.py`, `tuned_params.json`), parameter sweep and sensitivity export. |
 | [`utils/`](utils/) | Batch manager, results logger, and the `plots/` figure factory (comparative, convergence, breakdown, tuning). |
-| [`notebooks/`](notebooks/) | `exam_scheduling.ipynb` (local exploration), `colab_runner.ipynb` (full paper batch), `batch19_colab.ipynb` (Phase-2 validation), `gpu_measurement_colab.ipynb` (Phase-3 CPU/GPU sweep), and [`COLAB_RUNBOOK.md`](notebooks/COLAB_RUNBOOK.md). |
+| [`notebooks/`](notebooks/) | `exam_scheduling.ipynb` (local exploration), `colab_runner.ipynb` (full paper batch), `batch19_colab.ipynb` (Phase-2 validation), and [`COLAB_RUNBOOK.md`](notebooks/COLAB_RUNBOOK.md). |
 | [`instances/`](instances/) | The eight ITC 2007 Examination Track `.exam` files (set1 – set8). |
-| [`results/`](results/) | Per-batch outputs: `aggregated.csv`, raw solutions, per-algorithm logs. `batch_018_colab/` = paper-grade batch (13 algos, full matrix); `batch_019_colab/` = Phase-2 cached/Thompson validation; `gpu_measurement_colab/` = Phase-3 CPU/GPU sweep. |
+| [`results/`](results/) | Per-batch outputs: `aggregated.csv`, raw solutions, per-algorithm logs. `batch_018_colab/` = paper-grade batch (13 algos, full matrix); `batch_019_colab/` = Phase-2 cached/Thompson validation. |
 | [`graphs/`](graphs/) | The eight paper figures (`fig1_pareto.png` … `fig8_gap_leaderboard.png`) plus `tables/` (CSV + LaTeX). Cross-batch analysis now lives as a printed-table markdown at [`graphs/CROSS_BATCH_ANALYSIS.md`](graphs/CROSS_BATCH_ANALYSIS.md). |
-| [`docs/`](docs/) | [`PERF_ROADMAP.md`](docs/PERF_ROADMAP.md) — Phase 2/3 design, measurements, parity validation. [`FPGA_DESIGN.md`](docs/FPGA_DESIGN.md) — HDL cycle-sim for move_delta. |
+| [`docs/`](docs/) | [`PERF_ROADMAP.md`](docs/PERF_ROADMAP.md) — CPU design, measurements, parity validation. [`FPGA_DESIGN.md`](docs/FPGA_DESIGN.md) — HDL cycle-sim for move_delta. |
 | [`report/`](report/) | Peer research report in arXiv-style flat prose (`peer_research_report.md` / `.pdf`). |
 | [`slides/`](slides/) | Deck generator (`build_deck.py`, `deck_*.py`), rendered `.pptx` / `.pdf`, and the 16-slide `speech_script.md` / `.pdf`. |
 | [`references/`](references/) | Annotated bibliography (`references.md`) — the full reading list behind the paper. |
@@ -66,7 +72,7 @@ A single Python entry point (`main.py`) dispatches to thirteen algorithms living
 | Flag | Description |
 |------|-------------|
 | `--dataset FILE` | ITC 2007 `.exam` file |
-| `--algo NAME` | Base (13): `greedy`, `tabu`, `kempe`, `sa`, `alns`, `gd`, `abc`, `ga`, `lahc`, `woa`, `hho`, `cpsat`, `vns`. Phase-2 cached/SIMD: `tabu_simd`, `tabu_cached`, `sa_cached`, `gd_cached`, `lahc_cached`, `alns_cached`, `alns_thompson`, `vns_cached`. Phase-3 CUDA: `tabu_cached_cuda`, `alns_cuda`, `ga_cuda`, `abc_cuda`, `hho_cuda`, `woa_cuda`, `sa_parallel_cuda` (requires `HAVE_CUDA=1` at build). |
+| `--algo NAME` | Base (13): `greedy`, `tabu`, `kempe`, `sa`, `alns`, `gd`, `abc`, `ga`, `lahc`, `woa`, `hho`, `cpsat`, `vns`. Phase-2 cached/SIMD: `tabu_simd`, `tabu_cached`, `sa_cached`, `gd_cached`, `lahc_cached`, `alns_cached`, `alns_thompson`, `vns_cached`. |
 | `--mode MODE` | `demo` (default), `plot`, `batches`, `tune` |
 | `--size N` | Exam count for synthetic demo mode |
 | `--seed N` | Random seed (default: 42) |
@@ -126,12 +132,7 @@ exam-scheduling/
 │       ├── abc.h, ga.h, lahc.h, woa.h, hho.h
 │       ├── cpsat.h, vns.h
 │       ├── tabu_cached.h, sa_cached.h, gd_cached.h, lahc_cached.h, vns_cached.h
-│       ├── alns_cached.h, alns_thompson.h, tabu_simd.h
-│       ├── tabu_cached_cuda.h, alns_cuda.h, ga_cuda.h
-│       ├── abc_cuda.h, hho_cuda.h, woa_cuda.h, sa_parallel_cuda.h
-│       └── cuda/
-│           ├── cuda_evaluator.h
-│           └── delta_kernel.cu
+│       └── alns_cached.h, alns_thompson.h, tabu_simd.h
 │
 ├── tooling/
 │   ├── tuned_params.py       # single source of truth for defaults
@@ -221,7 +222,7 @@ That runs every algorithm on set4 (273 exams — small and fast) and drops outpu
 | 12 | GVNS | Hybrid | General Variable Neighbourhood Search with SA acceptance |
 | 13 | HHO+ | Swarm (hybrid) | Harris-Hawks escape + Levy flight with local-search refinement |
 
-All algorithms run through one C++ binary. Python fallbacks exist for algorithms 1-8 when the binary is unavailable. The Phase-2 `*_cached` / `*_simd` / `alns_thompson` variants and the Phase-3 `*_cuda` variants wrap these base 13 and are available via the same `--algo` flag — see [`docs/PERF_ROADMAP.md`](docs/PERF_ROADMAP.md) for what each layer changes and when it pays off.
+All algorithms run through one C++ binary. Python fallbacks exist for algorithms 1-8 when the binary is unavailable. The Phase-2 `*_cached` / `*_simd` / `alns_thompson` variants wrap these base 13 and are available via the same `--algo` flag — see [`docs/PERF_ROADMAP.md`](docs/PERF_ROADMAP.md) for what each layer changes and when it pays off.
 
 <p align="center">
   <img src="graphs/fig5_sensitivity.png" width="560"/>
@@ -417,22 +418,20 @@ python3 main.py --rollback-params 2        # restore version 2 from log
 
 ---
 
-## Phase 2 / Phase 3 — cached, Thompson, and CUDA variants
+## Phase 2 — cached, SIMD, and Thompson variants
 
-Post-batch-18 performance work added two new layers on top of the original 13 algorithms:
+Post-batch-18 CPU performance work added a new layer on top of the original 13 algorithms:
 
 - **Phase 2 (CPU)** — incremental **cached evaluator**, **Thompson-sampling AOS**, AVX2-SIMD `move_delta`, xoshiro256++ RNG, and multi-depth ejection chains. Shipped as `tabu_cached`, `sa_cached`, `gd_cached`, `lahc_cached`, `alns_cached`, `alns_thompson`, `vns_cached`, `tabu_simd`.
-- **Phase 3 (GPU/CUDA)** — move-delta, placement, full-eval, and parallel-SA kernels (`cpp/src/cuda/`). Shipped as `tabu_cached_cuda`, `alns_cuda`, `ga_cuda`, `abc_cuda`, `hho_cuda`, `woa_cuda`, `sa_parallel_cuda` plus CPU twins for bit-exact parity. Built when `HAVE_CUDA=1`; otherwise the binary falls back to the CPU fast path transparently.
 
-Measured speedups, parity validation, and honest losses (launch-overhead on small instances) are in [`docs/PERF_ROADMAP.md`](docs/PERF_ROADMAP.md).
+Measured speedups, parity validation, and cache overhead are in [`docs/PERF_ROADMAP.md`](docs/PERF_ROADMAP.md).
 
-**Three validation batches live under `results/`:**
+**Two validation batches live under `results/`:**
 
 | Batch | Scope | Notebook |
 |---|---|---|
 | `batch_018_colab/` | 13 algos × 8 sets × 7 seeds, chain tournament, scaling ladder, sensitivity sweep, CP-SAT IP | [`colab_runner.ipynb`](notebooks/colab_runner.ipynb) |
 | `batch_019_colab/` | 5 Phase-2 cached/Thompson variants × 8 sets × 3 seeds (feasibility + parity check) | [`batch19_colab.ipynb`](notebooks/batch19_colab.ipynb) |
-| `gpu_measurement_colab/` | 7 CPU/GPU pairs × 5 sets × 3 seeds, SA-parallel throughput | [`gpu_measurement_colab.ipynb`](notebooks/gpu_measurement_colab.ipynb) |
 
 See each batch's `INDEX.md` / `README.md` for what's in (and intentionally not in) it.
 
@@ -444,11 +443,11 @@ make batch19 BATCH19_SEEDS="42 43 44 45 46" \
 python3 scripts/summarize_batch19.py results/batch_019_validation
 ```
 
-Colab: open the corresponding notebook and `Runtime → Run all`. Batch 19 is CPU-bound — use a **High-RAM CPU** runtime (T4 High-RAM fine if GPU is idle); the `gpu_measurement_colab` notebook needs a **T4 or A100**.
+Colab: open the corresponding notebook and `Runtime → Run all`. Batch 19 is CPU-bound — use a **High-RAM CPU** runtime.
 
 **Cross-batch analysis tables** (coverage, global normalized ranking, tier progression, per-instance winners, same-batch variant deltas, runtime comparison) are in [`graphs/CROSS_BATCH_ANALYSIS.md`](graphs/CROSS_BATCH_ANALYSIS.md) and regenerated by `python3 scripts/make_batch_comparison.py` (prints to stdout + rewrites the file).
 
-**Microbenchmarks** (move_delta + portfolio + FPGA cycle-sim): `make bench-omp BENCH_INSTANCE=instances/exam_comp_setX.exam`. Everything runs on a fresh clone with no non-standard dependencies beyond `g++`, `make`, and (optionally) `nvcc` for CUDA or `verilator` for the HDL cosim.
+**Microbenchmarks** (move_delta + portfolio + FPGA cycle-sim): `make bench-omp BENCH_INSTANCE=instances/exam_comp_setX.exam`. Everything runs on a fresh clone with no non-standard dependencies beyond `g++`, `make`, and (optionally) `verilator` for the HDL cosim.
 
 ---
 
@@ -460,7 +459,6 @@ Colab: open the corresponding notebook and `Runtime → Run all`. Batch 19 is CP
 - GNU Make (Linux/macOS native; Windows: `mingw32-make` from MSYS2, or Make inside WSL2)
 - Python 3.10+
 - pip packages: see `requirements.txt`
-- *(Optional, Phase-3 GPU)* CUDA Toolkit ≥ 11.8 (`nvcc` + `libcudart`) + a compatible NVIDIA GPU. Build with `make HAVE_CUDA=1 [CUDA_LIBDIR=/path/to/lib64]`; without it the `*_cuda` algorithms transparently fall back to their CPU twins and tests still pass.
 - *(Optional, FPGA cosim)* Verilator ≥ 5.0 for the HDL cycle-sim path (`sudo apt install verilator` — Ubuntu 24.04 ships 5.x). Driven by `make -f cpp/src/hdl/sim.mk`; see [`docs/FPGA_DESIGN.md`](docs/FPGA_DESIGN.md). Not needed for any algorithm — only to reproduce the cycle-count numbers.
 
 ### Setup
@@ -547,8 +545,7 @@ python main.py --show-params
   end-to-end, including the post-run step that unzips the batch locally
   and replays `make reproduce` to regenerate figures.
 - Phase-2 cached/Thompson validation: [`notebooks/batch19_colab.ipynb`](notebooks/batch19_colab.ipynb) → writes `results/batch_019_colab/`.
-- Phase-3 CPU-vs-GPU sweep: [`notebooks/gpu_measurement_colab.ipynb`](notebooks/gpu_measurement_colab.ipynb) → writes `results/gpu_measurement_colab/` with CSVs, parity assertions, throughput plots.
-- Cross-batch analysis tables: `python3 scripts/make_batch_comparison.py` (reads the three batch folders, prints + rewrites [`graphs/CROSS_BATCH_ANALYSIS.md`](graphs/CROSS_BATCH_ANALYSIS.md)).
+- Cross-batch analysis tables: `python3 scripts/make_batch_comparison.py` (reads the two batch folders, prints + rewrites [`graphs/CROSS_BATCH_ANALYSIS.md`](graphs/CROSS_BATCH_ANALYSIS.md)).
 - CI: every push runs `.github/workflows/reproduce.yml` — compiles the
   binary, runs the pytest suite, smoke-tests Tabu on set1, and exercises
   the plotting module.

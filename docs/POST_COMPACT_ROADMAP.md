@@ -1,6 +1,6 @@
 # Post-Compact Roadmap — State as of batch 19 prep
 
-Read this first after `/compact`. The exam-scheduling repo has had several sessions of Phase-2 / Phase-3 performance work. This doc is the handoff.
+Read this first after `/compact`. The exam-scheduling repo has had several sessions of CPU performance work. This doc is the handoff.
 
 ## What's shipped and working
 
@@ -70,23 +70,6 @@ python3 tooling/bo_tune.py --all     # 500-hour sweep, do offline
 ```
 Output: `tooling/tuned_params_v2.json` — loadable at runtime. Tuning needs to be run (offline, many hours) to actually improve soft; the skeleton is just the framework.
 
-### D. Phase 3b: CUDA move-scoring kernel ✓ DONE (skeleton + host-side integration)
-`cpp/src/cuda/delta_kernel.cu` — synthesizable CUDA kernel mirroring the FPGA design: one block per move, threads cooperate on adj scan, warp-shuffle reduction. Now has persistent-state C API (create/update_period_of/score_batch/destroy).
-
-`cpp/src/cuda/cuda_evaluator.h` — host-side wrapper with CPU fallback. Owns device buffers, exposes `sync_state(sol)` and `score_batch(...)`. Compiles and runs correctly without nvcc (CPU fallback path).
-
-`cpp/src/tabu_cached_cuda.h` + `--algo tabu_cuda` — tabu variant that batches candidate moves into one kernel call. CPU-fallback path is bit-exact equivalent to `tabu_cached` (verified on set4/set7 same seed, soft=54667/9506 both).
-
-`make cuda-build` — produces `cpp/build/libdelta_cuda.so`. To activate GPU path: `make cuda-build && make all HAVE_CUDA=1`. Verbose output reports `gpu=on/off (CPU fallback)`.
-
-**Remaining work (not done, scoped):** the current kernel covers conflict-count only. Full move_delta port (spread, 2-in-row, 2-in-day, period/room pen, PHC/RHC, frontload) is ~500 LoC of CUDA. Until that lands, the GPU path runs the kernel for timing but still calls Ecach.move_delta on host for authoritative delta — so no speedup yet, just plumbing validated. On Colab T4 with the extended kernel, expected **20-100× on the neighborhood scoring phase**.
-
-**Update (post-compact):** ✓ full move_delta kernel shipped. Every term (adj-conflicts, duration, room-capacity, period/room pen, PHC 4-codes, RHC, spread, 2-in-row, 2-in-day, frontload) is in `cpp/src/cuda/delta_kernel.cu::delta_kernel_full` and in the bit-exact CPU twin `CudaEvaluator::score_delta_cpu_ref`. Validator in `make bench` tests 10k random moves vs `Ecach.move_delta` — 0 mismatches across set1/set4/set7. Host no longer does soft-term correction; kernel returns authoritative int64 fixed-point (dh*100000 + ds).
-
-**Update (post-compact 2):** ✓ ALNS repair-phase GPU batching shipped. New `delta_kernel_placement` + `CudaEvaluator::score_placement_cpu_ref` + `alns.h::repair_greedy_batched` + `alns_cuda.h` (+ `--algo alns_cuda`). Placement-scorer validator in `make bench`: 0 mismatches / 4k slots vs `repair_greedy` inline cost. End-to-end alns_cuda CPU-fallback bit-exact with alns_thompson on set4 (33428 / 33428) and set7 (26851 / 26851).
-
-Remaining scheduled: population-based GPU support (GA/ABC/HHO/WOA full-eval kernel, ~500 LoC + per-algo host integration, 1 week estimate).
-
 ## Post-compact plan for tomorrow
 
 ## Post-compact plan for tomorrow (or whenever)
@@ -94,7 +77,6 @@ Remaining scheduled: population-based GPU support (GA/ABC/HHO/WOA full-eval kern
 1. **Finish items A, B before Colab batch 19** — DONE. Both A (intra-algo OpenMP) and B (VNS cached) are now complete, quality-verified. Post-compact session also closed the kempe-rollback bug in RecordingEvaluator (general fix, not just VNS).
 2. **Run batch 19 on Colab.** Expected output: `results/batch_019_colab.zip` with summary.csv showing per-instance winners.
 3. **(Optional, paper-grade)** Run item C's Optuna tuning offline (~500 compute-hours worth), regenerate tuned_params, rerun batch 19 with tuned params — this is the final soft-cost reduction path to within ~10% of BKS.
-4. Item D (CUDA) only if publishing a hardware-accel paper.
 
 ## Quick reference: measured speedups
 
