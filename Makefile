@@ -14,13 +14,9 @@ HEADERS  = $(SRC_DIR)/models.h $(SRC_DIR)/parser.h $(SRC_DIR)/evaluator.h \
            $(SRC_DIR)/hho.h \
            $(SRC_DIR)/evaluator_simd.h $(SRC_DIR)/evaluator_cached.h \
            $(SRC_DIR)/tabu_simd.h $(SRC_DIR)/tabu_cached.h \
-           $(SRC_DIR)/tabu_cached_cuda.h $(SRC_DIR)/cuda/cuda_evaluator.h \
            $(SRC_DIR)/sa_cached.h $(SRC_DIR)/gd_cached.h \
            $(SRC_DIR)/lahc_cached.h $(SRC_DIR)/alns_cached.h \
-           $(SRC_DIR)/alns_thompson.h $(SRC_DIR)/alns_cuda.h $(SRC_DIR)/vns_cached.h \
-           $(SRC_DIR)/ga_cuda.h $(SRC_DIR)/abc_cuda.h \
-           $(SRC_DIR)/hho_cuda.h $(SRC_DIR)/woa_cuda.h \
-           $(SRC_DIR)/sa_parallel_cuda.h \
+           $(SRC_DIR)/alns_thompson.h $(SRC_DIR)/vns_cached.h \
            $(SRC_DIR)/xoshiro.h $(SRC_DIR)/ejection.h
 
 .PHONY: all clean test reproduce bench bench-omp fast-pgo pgo-clean batch19 batch19-colab
@@ -37,25 +33,9 @@ BENCH_HDR = $(HEADERS) $(SRC_DIR)/evaluator_simd.h $(SRC_DIR)/tabu_simd.h \
 
 all: $(BIN)
 
-# Optional CUDA linkage — set HAVE_CUDA=1 when invoking make AND build
-# libdelta_cuda.so first via `make cuda-build`. On CPU-only machines omit
-# HAVE_CUDA; tabu_cuda will run the CPU fallback path (correct, no speedup).
-CUDA_FLAGS =
-CUDA_LINK =
-# CUDA_LIBDIR: directory containing libcudart.so. Defaults try standard
-# locations; user can override: `make all HAVE_CUDA=1 CUDA_LIBDIR=/path`.
-CUDA_LIBDIR ?= $(shell test -f /usr/local/cuda/lib64/libcudart.so && echo /usr/local/cuda/lib64 || \
-                         (test -f /usr/lib/x86_64-linux-gnu/libcudart.so && echo /usr/lib/x86_64-linux-gnu || \
-                          echo /usr/lib/cuda/lib64))
-ifeq ($(HAVE_CUDA),1)
-  CUDA_FLAGS += -DHAVE_CUDA
-  CUDA_LINK  += -L$(BUILD_DIR) -ldelta_cuda -Wl,-rpath,'$$ORIGIN/../build' \
-                -L$(CUDA_LIBDIR) -lcudart
-endif
-
 $(BIN): $(SRC) $(HEADERS)
 	@mkdir -p $(BUILD_DIR)
-	$(CXX) $(CXXFLAGS) -mavx2 -fopenmp $(CUDA_FLAGS) -o $@ $(SRC) $(CUDA_LINK)
+	$(CXX) $(CXXFLAGS) -mavx2 -fopenmp -o $@ $(SRC)
 	@echo "Built: $@"
 
 clean:
@@ -69,7 +49,7 @@ clean:
 # Does NOT modify any existing header. Build with: make bench
 $(BENCH_BIN): $(BENCH_SRC) $(BENCH_HDR)
 	@mkdir -p $(BUILD_DIR)
-	$(CXX) $(CXXFLAGS) -mavx2 $(CUDA_FLAGS) -o $@ $(BENCH_SRC) $(CUDA_LINK)
+	$(CXX) $(CXXFLAGS) -mavx2 -o $@ $(BENCH_SRC)
 	@echo "Built: $@"
 
 BENCH_INSTANCE ?= instances/exam_comp_set4.exam
@@ -106,19 +86,6 @@ fast-pgo:
 	@echo "Built PGO binary: $(FAST_BIN)"
 pgo-clean:
 	rm -rf $(PGO_DIR) $(FAST_BIN)
-
-# ── CUDA move-scoring kernel (Phase 3b — optional, requires nvcc + GPU) ──
-CUDA_SRC = $(SRC_DIR)/cuda/delta_kernel.cu
-CUDA_LIB = $(BUILD_DIR)/libdelta_cuda.so
-cuda-build:
-	@command -v nvcc >/dev/null 2>&1 || { \
-	  echo "error: nvcc not found. Install CUDA toolkit to use --algo cuda*"; exit 1; }
-	@mkdir -p $(BUILD_DIR)
-	nvcc -O3 -std=c++17 --compiler-options -fPIC -shared \
-	    -o $(CUDA_LIB) $(CUDA_SRC)
-	@echo "Built CUDA kernel: $(CUDA_LIB)"
-cuda-clean:
-	rm -f $(CUDA_LIB)
 
 # ── Batch 19: validate post-Phase-2 algos on all ITC 2007 sets ──
 # Runs the cached/Thompson/SIMD variants across sets 1-8 with 3 seeds each.

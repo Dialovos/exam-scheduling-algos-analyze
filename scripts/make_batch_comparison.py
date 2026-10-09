@@ -2,21 +2,19 @@
 """
 Cross-batch comparison tables.
 
-Pools data from the three batches under results/ and prints tabular analyses
+Pools data from the two batches under results/ and prints tabular analyses
 to stdout + writes the same content to graphs/CROSS_BATCH_ANALYSIS.md.
 
 Normalization: all quality tables use `norm_soft = soft / min(soft over all
-three batches on that instance)`, so 1.0 = best achieved by anyone on that
+two batches on that instance)`, so 1.0 = best achieved by anyone on that
 instance. This is the only way to fairly compare batches with very different
-iter budgets (batch_018 full paper budgets, batch_019 3000 iters, gpu-sweep
-100 iters).
+iter budgets (batch_018 full paper budgets, batch_019 3000 iters).
 
 Batches:
   batch_018_colab       paper-grade, 13 base algos, 8 sets × 7 seeds (no runtime)
   batch_019_colab       Phase-2 cached/Thompson, 5 algos, 8 sets × 3 seeds
-  gpu_measurement_colab Phase-3 CPU/GPU pairs, 14 algos, 5 sets × 3 seeds
 
-Reference: smoke-test numbers for the base→cached and cached→CUDA progressions
+Reference: smoke-test numbers for the base→cached progression
 are recorded in docs/PERF_ROADMAP.md.
 """
 from __future__ import annotations
@@ -39,18 +37,17 @@ DISPLAY_TO_SLUG = {
     "WOA": "woa", "HHO+": "hho", "HHO": "hho",
     "CP-SAT B&B": "cpsat", "GVNS": "vns",
 }
-CUDA_ALIAS = {"tabu_cuda": "tabu_cached_cuda"}
 
 FAMILIES: dict[str, list[str]] = {
-    "tabu":   ["tabu", "tabu_cached", "tabu_cached_cuda"],
-    "sa":     ["sa",   "sa_cached",   "sa_parallel_cuda"],
+    "tabu":   ["tabu", "tabu_cached"],
+    "sa":     ["sa",   "sa_cached"],
     "gd":     ["gd",   "gd_cached"],
     "lahc":   ["lahc", "lahc_cached"],
-    "alns":   ["alns", "alns_thompson", "alns_cached", "alns_cuda"],
-    "abc":    ["abc",  "abc_cuda"],
-    "ga":     ["ga",   "ga_cuda"],
-    "hho":    ["hho",  "hho_cuda"],
-    "woa":    ["woa",  "woa_cuda"],
+    "alns":   ["alns", "alns_thompson", "alns_cached"],
+    "abc":    ["abc"],
+    "ga":     ["ga"],
+    "hho":    ["hho"],
+    "woa":    ["woa"],
     "kempe":  ["kempe"],
     "vns":    ["vns"],
     "greedy": ["greedy"],
@@ -60,15 +57,13 @@ SLUG_TO_FAMILY = {s: f for f, slugs in FAMILIES.items() for s in slugs}
 
 
 def tier_of(slug: str) -> str:
-    if slug.endswith("_cuda"):
-        return "cuda"
     if slug.endswith("_cached") or slug == "alns_thompson":
         return "cached"
     return "base"
 
 
-BATCHES = ["018 (paper)", "019 (cached)", "gpu-sweep"]
-TIER_ORDER = ["base", "cached", "cuda"]
+BATCHES = ["018 (paper)", "019 (cached)"]
+TIER_ORDER = ["base", "cached"]
 
 # ------------------------------------------------------------------- loaders
 
@@ -91,18 +86,8 @@ def load_batch_019() -> pd.DataFrame:
     return df[["batch", "algo", "instance", "seed", "soft", "runtime_s"]]
 
 
-def load_gpu_sweep() -> pd.DataFrame:
-    df = pd.read_csv(RESULTS / "gpu_measurement_colab" / "gpu_sweep_raw.csv")
-    df = df.rename(columns={"set": "instance"})
-    if "error" in df.columns:
-        df = df[df["error"].isna() | (df["error"].astype(str).str.strip() == "")]
-    df["algo"] = df["algo"].replace(CUDA_ALIAS)
-    df["batch"] = "gpu-sweep"
-    return df[["batch", "algo", "instance", "seed", "soft", "runtime_s"]]
-
-
 def load_all() -> pd.DataFrame:
-    df = pd.concat([load_batch_018(), load_batch_019(), load_gpu_sweep()],
+    df = pd.concat([load_batch_018(), load_batch_019()],
                    ignore_index=True)
     df["family"] = df["algo"].map(SLUG_TO_FAMILY).fillna("other")
     df["tier"] = df["algo"].apply(tier_of)
@@ -191,7 +176,6 @@ def table_tier_progression(df: pd.DataFrame) -> str:
     tier = (df.groupby(["family", "tier"])["norm_soft"].mean()
               .unstack().reindex(columns=TIER_ORDER))
     tier["base→cached Δ"] = tier.get("cached") - tier.get("base")
-    tier["cached→cuda Δ"] = tier.get("cuda") - tier.get("cached")
     tier = tier.loc[[f for f in FAMILIES if f in tier.index]]
     tier = tier.reset_index()
     return fmt_table(tier,
@@ -207,7 +191,7 @@ def table_instance_winners(df: pd.DataFrame) -> str:
 
 
 def table_variant_delta_same_batch(df: pd.DataFrame) -> str:
-    """Where a batch has both a base and a cached (or cached and cuda) variant
+    """Where a batch has both a base and a cached variant
     of the same family, report the raw soft delta. No normalization needed —
     same batch, same iter budget, same instance set."""
     rows = []
@@ -220,8 +204,7 @@ def table_variant_delta_same_batch(df: pd.DataFrame) -> str:
                 continue
             means = sub.groupby("algo")["soft"].mean()
             tiers_present = {tier_of(a): a for a in means.index}
-            for lhs, rhs in [("base", "cached"), ("cached", "cuda"),
-                             ("base", "cuda")]:
+            for lhs, rhs in [("base", "cached")]:
                 if lhs in tiers_present and rhs in tiers_present:
                     l_algo, r_algo = tiers_present[lhs], tiers_present[rhs]
                     l_soft, r_soft = means[l_algo], means[r_algo]
@@ -275,8 +258,6 @@ alns             set4             (*)         (*)           0.75×   slight bett
 alns             set7             (*)         (*)           0.65×   identical
 alns_thompson    set7 10k        133.3s       52.4s         2.54×   −107 (1% better)
 
-Phase-3 CUDA smoke: see docs/PERF_ROADMAP.md §3b / §4-Option-B for
-sa_parallel_cuda throughput (1.45 M iter/sec, 5.8× CPU on 64 streams).
 """
 
 
@@ -298,7 +279,7 @@ def main():
 
     OUT_MD.parent.mkdir(parents=True, exist_ok=True)
     OUT_MD.write_text("# Cross-batch analysis\n\n"
-                      "Auto-generated by `scripts/make_batch_comparison.py`.\n\n"
+                      "Run `scripts/make_batch_comparison.py` to refresh these tables.\n\n"
                       "```\n" + combined + "```\n")
     print(f"\nsaved -> {OUT_MD.relative_to(ROOT)}")
 
