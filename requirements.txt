@@ -29,6 +29,3 @@ pytest-timeout>=2.2
 # ─────────────────────────────────────────────────────────────────────────
 #   g++ >= 11            C++20 solver build        apt install g++
 #   GNU make             build driver              apt install make
-#   Verilator >= 5.0     HDL cosim for FPGA path   apt install verilator
-#     (Ubuntu 24.04 ships 5.x. Only needed for `make -f cpp/src/hdl/sim.mk`
-#     — see docs/FPGA_DESIGN.md.)

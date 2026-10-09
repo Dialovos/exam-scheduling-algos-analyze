@@ -6,11 +6,10 @@ Read this first after `/compact`. The exam-scheduling repo has had several sessi
 
 ### Build targets
 - `make all` — main solver binary with all algos, -mavx2 required
-- `make bench` — move_delta microbench + FPGA cycle-sim
+- `make bench` — move_delta microbench
 - `make bench-omp` — above + parallel portfolio + end-to-end Tabu comparison + AOS long-run study
 - `make fast-pgo` — Profile-Guided Optimization build (marginal on short runs)
 - `make batch19` — runs new algos × seeds × sets; writes `results/batch_019_validation/`
-- `make -f cpp/src/hdl/sim.mk` — Verilator cosim of FPGA delta kernel (HDL validated 2500/2500 correct)
 
 ### Algorithms added (all via main.cpp dispatch, exposed as `--algo <name>`)
 - `tabu_simd` — AVX2 move_delta + don't-look bits
@@ -28,14 +27,11 @@ Read this first after `/compact`. The exam-scheduling repo has had several sessi
 - `cpp/src/neighbourhoods.h` — templated on `typename Ev` (one-shot edit, done)
 - `cpp/src/xoshiro.h` — Xoshiro256pp RNG, 2.47× faster than mt19937
 - `cpp/src/ejection.h` — multi-depth chain helper, wired into tabu_cached
-- `cpp/src/fpga_sim.h` — cycle-accurate behavioral FPGA simulator
-- `cpp/src/hdl/delta_kernel.sv` + `delta_kernel_cosim.sv` — synthesizable HDL + Verilator cosim
 - `cpp/src/polish.h` — post-processing single-move + pair-swap + room polish
 - `cpp/src/portfolio.h` — OpenMP parallel portfolio with default winners
 
 ### Docs
 - `docs/PERF_ROADMAP.md` — full measurement matrix, Pareto-win verdicts, what ships and what doesn't
-- `docs/FPGA_DESIGN.md` — architecture, cosim results, Vitis HLS variant, cost tables
 - `README.md` — Phase 2 section with local + Colab paths
 
 ### Colab / batch-19 pipeline
@@ -91,7 +87,6 @@ Output: `tooling/tuned_params_v2.json` — loadable at runtime. Tuning needs to 
 | Parallel portfolio (8 jobs) | 3.8-5.3× wall-clock | best-of-N |
 | Polish pipeline (applied to portfolio) | +0.02 s | **−14.5% soft** |
 | xoshiro256++ RNG microbench | 2.47× | identical distribution |
-| FPGA cycle-sim (conflict kernel, 16 cores) | 115-168× | bit-exact |
 
 ## Key files to NOT edit blindly
 

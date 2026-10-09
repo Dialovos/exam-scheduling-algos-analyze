@@ -6,9 +6,8 @@ __pycache__/
 .ruff_cache/
 .ipynb_checkpoints/
 
-# C++ and Verilator build output
+# C++ build output
 cpp/build/
-cpp/src/hdl/obj_dir/
 *.exe
 *.o
 *.so
