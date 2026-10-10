@@ -28,7 +28,6 @@
 #include "xoshiro.h"
 #include "portfolio.h"
 #include "polish.h"
-#include "fpga_sim.h"
 #include "evaluator_cached.h"
 
 #include <chrono>
@@ -361,92 +360,6 @@ int main(int argc, char** argv) {
     }
 #else
     std::printf("\n  (portfolio requires -fopenmp — build with `make bench-omp`)\n");
-#endif
-
-    // ═══════════════════════════════════════════════════════════
-    //  FPGA cycle-accurate behavioral simulation
-    //  (matches SystemVerilog DeltaKernel; runs today, no tools needed)
-    // ═══════════════════════════════════════════════════════════
-    std::printf("\n=== FPGA cycle-sim (conflict-delta kernel) ===\n");
-    std::printf("target: Alveo U55C @ 350 MHz, LANES=8 per kernel\n");
-
-    // Correctness gate first — any mismatch and we bail loudly.
-    DeltaKernelSim sim(/*lanes=*/8, /*clock_mhz=*/350.0, /*pipe_depth=*/6);
-    int fpga_mismatch = 0;
-    int fpga_check_n = std::min(iters, 5000);
-    for (int i = 0; i < fpga_check_n; i++) {
-        const auto& p = props[i];
-        int old_pid = sol.period_of[p.eid]; if (old_pid < 0) continue;
-        int padded = (int)Esimd.adj_other[p.eid].size();
-        int32_t ref = conflict_delta_scalar(
-            Esimd.adj_other[p.eid].data(), Esimd.adj_cnt[p.eid].data(),
-            padded, sol.period_of.data(), old_pid, p.new_pid);
-#ifdef EVAL_SIMD_AVX2
-        int32_t simd = conflict_delta_simd_isolated(
-            Esimd.adj_other[p.eid].data(), Esimd.adj_cnt[p.eid].data(),
-            padded, sol.period_of.data(), old_pid, p.new_pid);
-        if (simd != ref) { fpga_mismatch++; continue; }
-#endif
-        int32_t got = sim.process_move(
-            Esimd.adj_other[p.eid].data(), Esimd.adj_cnt[p.eid].data(),
-            padded, sol.period_of.data(), old_pid, p.new_pid);
-        if (got != ref) {
-            fpga_mismatch++;
-            if (fpga_mismatch <= 3) {
-                std::fprintf(stderr,
-                    "[fpga] MISMATCH eid=%d old=%d new=%d  ref=%d got=%d\n",
-                    p.eid, old_pid, p.new_pid, ref, got);
-            }
-        }
-    }
-    if (fpga_mismatch != 0) {
-        std::fprintf(stderr,
-            "[fpga] FAIL: %d/%d mismatches — cycle-sim results NOT reliable.\n",
-            fpga_mismatch, fpga_check_n);
-    } else {
-        std::printf("  correctness: %d/%d moves match scalar oracle [OK]\n",
-                    fpga_check_n, fpga_check_n);
-    }
-
-    // Also add pipeline fill once per full batch (amortized over all moves)
-    sim.add_pipeline_fill();
-
-    double ns_iter = sim.stats.ns_per_move_iterative();
-    double ns_pipe = sim.stats.ns_per_move_pipelined();
-    int kernels = 16;
-    double ns_pipe_n = sim.stats.ns_per_move_multi_kernel(kernels);
-
-    std::printf("  moves simulated:       %llu\n",
-                (unsigned long long)sim.stats.moves_processed);
-    std::printf("  total cycles (iter):   %llu\n",
-                (unsigned long long)sim.stats.total_cycles_iterative);
-    std::printf("  cycles/move avg:       %.2f\n",
-                (double)sim.stats.total_cycles_iterative / sim.stats.moves_processed);
-    std::printf("  ns/move, 1 kernel iter:      %.2f\n", ns_iter);
-    std::printf("  ns/move, 1 kernel pipelined: %.2f  (II=1 steady state)\n", ns_pipe);
-    std::printf("  ns/move, %d kernels parallel: %.2f  (realistic Alveo U55C)\n",
-                kernels, ns_pipe_n);
-
-    // Fair compare: conflict-count-only, both sides
-#ifdef EVAL_SIMD_AVX2
-    // Reuse timing harness: just the conflict-count portion on SIMD
-    double t_simd_cc = time_ms([&]{
-        int32_t s = 0;
-        for (auto& p : props) {
-            int op = sol.period_of[p.eid]; if (op < 0) continue;
-            int padded = (int)Esimd.adj_other[p.eid].size();
-            s += conflict_delta_simd_isolated(
-                Esimd.adj_other[p.eid].data(), Esimd.adj_cnt[p.eid].data(),
-                padded, sol.period_of.data(), op, p.new_pid);
-        }
-        sink += s;
-    }, reps);
-    double ns_simd_cc = t_simd_cc * 1e6 / iters;
-    std::printf("\n  AVX2 conflict-count (isolated): %.2f ns/move  (wall-clock CPU)\n",
-                ns_simd_cc);
-    std::printf("  FPGA advantage (1 kernel, pipelined):  %.2fx\n", ns_simd_cc / ns_pipe);
-    std::printf("  FPGA advantage (%d kernels, Alveo):     %.2fx\n",
-                kernels, ns_simd_cc / ns_pipe_n);
 #endif
 
     return 0;

@@ -37,7 +37,7 @@ def _ip_row(ip_soft, instances):
 
 
 def make_t1(out_dir):
-    """Write T1 leaderboard to ``<out_dir>/t1_leaderboard.{csv,tex}``."""
+    """Write and return the T1 leaderboard CSV at ``<out_dir>/t1_leaderboard.csv``."""
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -99,32 +99,6 @@ def make_t1(out_dir):
     ].reset_index(drop=True)
 
     csv_path = out_dir / "t1_leaderboard.csv"
-    tex_path = out_dir / "t1_leaderboard.tex"
     out_df.to_csv(csv_path, index=False)
-    tex_path.write_text(_to_booktabs(out_df))
 
-    return csv_path, tex_path
-
-
-def _tex_escape(s):
-    """Escape LaTeX special chars in a string cell (ASCII only input)."""
-    s = str(s)
-    for a, b in (("\\", r"\textbackslash{}"), ("&", r"\&"), ("%", r"\%"),
-                 ("$", r"\$"), ("#", r"\#"), ("_", r"\_"), ("{", r"\{"),
-                 ("}", r"\}"), ("~", r"\textasciitilde{}"),
-                 ("^", r"\textasciicircum{}")):
-        s = s.replace(a, b)
-    return s
-
-
-def _to_booktabs(df):
-    """Hand-roll a booktabs LaTeX table. Avoids pandas' jinja2 dependency."""
-    cols = list(df.columns)
-    col_spec = "l" + "r" * (len(cols) - 1)
-    lines = [r"\begin{tabular}{" + col_spec + "}", r"\toprule",
-             " & ".join(_tex_escape(c) for c in cols) + r" \\",
-             r"\midrule"]
-    for _, row in df.iterrows():
-        lines.append(" & ".join(_tex_escape(row[c]) for c in cols) + r" \\")
-    lines += [r"\bottomrule", r"\end{tabular}"]
-    return "\n".join(lines) + "\n"
+    return csv_path

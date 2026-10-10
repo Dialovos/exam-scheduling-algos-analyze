@@ -10,7 +10,6 @@ from pathlib import Path
 
 import pandas as pd
 
-from utils.tables.paper.t1_leaderboard import _to_booktabs
 
 
 ROWS = [
@@ -25,6 +24,7 @@ ROWS = [
 
 
 def make_t3(out_dir):
+    """Write and return the T3 partial-adoption CSV path."""
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -34,8 +34,6 @@ def make_t3(out_dir):
     ])
 
     csv_path = out_dir / "t3_partial_adopt.csv"
-    tex_path = out_dir / "t3_partial_adopt.tex"
     out_df.to_csv(csv_path, index=False)
-    tex_path.write_text(_to_booktabs(out_df))
 
-    return csv_path, tex_path
+    return csv_path
